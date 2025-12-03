@@ -36,7 +36,7 @@
 
   <div class="mt-2">
     <button type="submit">建立管理者帳號</button>
-    <a class="btn btn-secondary" href="../auth/login.html">返回登入</a>
+    <a class="btn btn-secondary" href="{{ url_for('login') }}">返回登入</a>
   </div>
 </form>
 
@@ -45,7 +45,8 @@
   <p class="text-muted">
     如果只需要遠端下單與查看產線模擬，請使用一般使用者帳號即可。
   </p>
-  <a class="btn" href="../auth/register_customer.html">前往一般使用者註冊</a>
+  <a class="btn" href="{{ url_for('register_customer') }}">前往一般使用者註冊</a>
 </div>
 {% endblock %}
+
 
