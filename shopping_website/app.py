@@ -1,4 +1,4 @@
-from flask import Flask, render_template, redirect, url_for
+from flask import Flask, render_template, redirect, url_for, session
 
 # --- 建立 Flask App ---
 app = Flask(__name__)
@@ -8,7 +8,12 @@ app.secret_key = "CHANGE_ME_LATER"   # 之後再改成安全一點
 # --- 首頁 ---
 @app.route("/")
 def index():
-    return render_template("index.html")
+    # 第一次進來：session 裡沒有這個 key
+    first_visit = not session.get("seen_index_loader", False)
+    # 之後就記錄起來
+    session["seen_index_loader"] = True
+
+    return render_template("index.html", show_loader=first_visit)
 
 
 # --- auth 區（先做簡單版，之後你可以拆到 core/auth_routes.py） ---

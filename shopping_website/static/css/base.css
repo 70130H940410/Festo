@@ -366,3 +366,116 @@ tr:hover td {
 
 .text-right { text-align: right; }
 .text-center { text-align: center; }
+
+
+/* ========= 頁面開啟動畫 (FESTO Loader) ========= */
+
+#page-loader {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at top, #ffffff 0, #f5f7fa 45%, #e5edf5 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  transition: opacity 0.5s ease;
+}
+
+#page-loader.hide {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loader-card {
+  background-color: #ffffff;
+  border-radius: 18px;
+  padding: 1.6rem 2.2rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.09);
+  text-align: center;
+  border-top: 4px solid var(--festo-blue);
+  min-width: 260px;
+  max-width: 360px;
+  animation: loader-pop-in 0.5s ease-out;
+}
+
+.loader-logo-img {
+  height: 36px;
+  margin-bottom: 0.6rem;
+}
+
+.loader-logo-text {
+  font-size: 1.8rem;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  color: var(--festo-blue);
+  margin-bottom: 0.2rem;
+  text-indent: 0.25em; /* 抵消 letter-spacing 左邊空白 */
+  animation: loader-fade-up 0.7s ease-out;
+}
+
+.loader-subtitle {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  margin-bottom: 0.9rem;
+  animation: loader-fade-up 0.9s ease-out;
+}
+
+.loader-bar-wrapper {
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background-color: #eef2f7;
+  overflow: hidden;
+  margin-bottom: 0.6rem;
+}
+
+.loader-bar {
+  width: 40%;
+  height: 100%;
+  background: linear-gradient(90deg, var(--festo-blue), var(--festo-blue-dark));
+  border-radius: 999px;
+  animation: loader-slide 1.1s infinite ease-in-out;
+}
+
+.loader-tip {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0;
+  animation: loader-fade-up 1.1s ease-out;
+}
+
+/* 動畫 keyframes */
+
+@keyframes loader-pop-in {
+  from {
+    transform: translateY(10px) scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes loader-fade-up {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes loader-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  50% {
+    transform: translateX(20%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}

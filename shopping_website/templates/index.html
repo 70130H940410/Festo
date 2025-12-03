@@ -3,6 +3,43 @@
 {% block title %}首頁 - 智慧工廠下單系統{% endblock %}
 
 {% block content %}
+
+{% if show_loader %}
+<!-- 首頁專用：FESTO 開啟動畫（只在第一次進首頁時顯示） -->
+<div id="page-loader">
+  <div class="loader-card">
+    <!-- 如果有 FESTO 圖片，可以放在 static/img/festo_logo.png 然後把這行打開 -->
+    <!-- <img src="{{ url_for('static', filename='img/festo_logo.png') }}" alt="Festo Logo" class="loader-logo-img"> -->
+
+    <div class="loader-logo-text">FESTO</div>
+    <div class="loader-subtitle">Smart Factory Ordering</div>
+
+    <div class="loader-bar-wrapper">
+      <div class="loader-bar"></div>
+    </div>
+
+    <p class="loader-tip">
+      歡迎來到智慧工廠遠端下單與製程模擬網站
+    </p>
+  </div>
+</div>
+
+<script>
+  window.addEventListener('load', function () {
+    const loader = document.getElementById('page-loader');
+    if (!loader) return;
+
+    // 停留一段時間再淡出（這裡是 1.5 秒）
+    setTimeout(function () {
+      loader.classList.add('hide');
+      setTimeout(function () {
+        loader.style.display = 'none';
+      }, 600); // 對應 CSS transition 0.5s
+    }, 1500);  // 想更久就改這個數字（毫秒）
+  });
+</script>
+{% endif %}
+
 <h1>智慧工廠遠端下單與製程模擬網站</h1>
 <p class="text-muted">
   透過瀏覽器即可完成產品下單、客製製程，並即時查看工廠產線運作狀態。
@@ -40,7 +77,7 @@
     <div class="mt-2 text-center">
       <a class="btn" href="{{ url_for('register_manager') }}">註冊工廠管理者</a>
     </div>
-
   </section>
 </div>
+
 {% endblock %}

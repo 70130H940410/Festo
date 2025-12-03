@@ -4,28 +4,27 @@
   <meta charset="UTF-8">
   <title>{% block title %}智慧工廠下單系統{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- 之後可以連到 static/css/base.css -->
-  <link rel="stylesheet" href="../static/css/base.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
 </head>
 <body>
   <!-- 導覽列 -->
   <header>
     <nav>
-        <a href="{{ url_for('index') }}">首頁</a>
+      <a href="{{ url_for('index') }}">首頁</a>
 
-        <!-- 一般使用者前台 -->
-        <a href="{{ url_for('order_page') }}">我要下單</a>
-        <a href="{{ url_for('user_profile') }}">個人資料</a>
+      <!-- 一般使用者前台 -->
+      <a href="{{ url_for('order_page') }}">我要下單</a>
+      <a href="{{ url_for('user_profile') }}">個人資料</a>
 
-        <!-- 管理者後台 -->
-        <a href="{{ url_for('manager_inventory') }}">庫存管理</a>
-        <a href="{{ url_for('manager_process_templates') }}">製程模板管理</a>
+      <!-- 管理者後台 -->
+      <a href="{{ url_for('manager_inventory') }}">庫存管理</a>
+      <a href="{{ url_for('manager_process_templates') }}">製程模板管理</a>
 
-        <!-- 登入 / 登出 -->
-        <span style="float: right;">
-            <a href="{{ url_for('login') }}">登入</a>
-            <a href="{{ url_for('logout') }}">登出</a>
-        </span>
+      <!-- 登入 / 登出 -->
+      <span style="margin-left:auto; display:flex; gap:0.75rem;">
+        <a href="{{ url_for('login') }}">登入</a>
+        <a href="{{ url_for('logout') }}">登出</a>
+      </span>
     </nav>
   </header>
 
@@ -38,9 +37,8 @@
   <footer>
     <small>智慧工廠遠端下單與製程模擬系統</small>
   </footer>
-
-  <!-- 之後可以引入 JS -->
-  <!-- <script src="{{ url_for('static', filename='js/main.js') }}"></script> -->
 </body>
 </html>
+
+
 
