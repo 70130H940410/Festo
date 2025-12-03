@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block title %}庫存管理{% endblock %}
+
+{% block content %}
+<h2>庫存管理</h2>
+
+<p>顯示各項零件庫存（上蓋、下蓋、保險絲、電路板）。之後會從資料庫帶資料。</p>
+
+<table border="1" cellpadding="5">
+  <tr>
+    <th>類型</th>
+    <th>顏色</th>
+    <th>位置</th>
+    <th>數量</th>
+  </tr>
+  <tr>
+    <td>top_cover</td>
+    <td>black</td>
+    <td>warehouse</td>
+    <td>50</td>
+  </tr>
+</table>
+
+<p>之後可以在這裡加「新增 / 修改庫存」的表單。</p>
+{% endblock %}
