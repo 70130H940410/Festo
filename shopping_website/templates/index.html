@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}首頁 - 智慧工廠下單系統{% endblock %}
+
+{% block content %}
+<h1>智慧工廠遠端下單與製程模擬網站</h1>
+<p class="text-muted">
+  透過瀏覽器即可完成產品下單、客製製程，並即時查看工廠產線運作狀態。
+</p>
+
+<div class="grid-2">
+  <!-- 一般使用者區塊 -->
+  <section class="card">
+    <h2>一般使用者（Customer）</h2>
+    <p>
+      適用於需要遠端下單的客戶。登入後可以選擇產品、設定製程，並追蹤訂單進度。
+    </p>
+    <ul>
+      <li>瀏覽可下單的產品</li>
+      <li>檢查工廠目前庫存</li>
+      <li>客製製程流程</li>
+      <li>查看產線模擬狀態</li>
+    </ul>
+    <div class="mt-2">
+      <a class="btn" href="{{ url_for('auth.register_customer') }}">註冊一般使用者</a>
+      <a class="btn btn-secondary" href="{{ url_for('auth.login') }}">已有帳號，前往登入</a>
+    </div>
+  </section>
+
+  <!-- 工廠管理者區塊 -->
+  <section class="card">
+    <h2>工廠負責人（Manager）</h2>
+    <p>
+      需持有工廠金鑰，登入後可管理物料庫存、標準製程模板，並檢視所有訂單狀態。
+    </p>
+    <ul>
+      <li>管理上蓋、下蓋、保險絲、電路板庫存</li>
+      <li>設定標準製程模板</li>
+      <li>監控所有訂單與 MES 狀態</li>
+    </ul>
+    <div class="mt-2">
+      <a class="btn" href="{{ url_for('auth.register_manager') }}">註冊工廠管理者</a>
+    </div>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}登入 - 智慧工廠下單系統{% endblock %}
+
+{% block content %}
+<h2>登入系統</h2>
+<p class="text-muted">
+  請輸入帳號與密碼登入。一般使用者與工廠管理者共用同一個登入入口。
+</p>
+
+<form method="post">
+  <label>
+    帳號
+    <input type="text" name="username" required>
+  </label>
+
+  <label>
+    密碼
+    <input type="password" name="password" required>
+  </label>
+
+  <div class="mt-2">
+    <button type="submit">登入</button>
+  </div>
+</form>
+
+<div class="card">
+  <h3>還沒有帳號？</h3>
+  <p>
+    一般使用者可直接註冊；若您是工廠負責人，請向系統管理者取得工廠金鑰後註冊。
+  </p>
+  <div class="mt-1">
+    <a class="btn" href="{{ url_for('auth.register_customer') }}">註冊一般使用者</a>
+    <a class="btn btn-secondary" href="{{ url_for('auth.register_manager') }}">註冊工廠管理者</a>
+  </div>
+</div>
+{% endblock %}

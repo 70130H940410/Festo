@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block title %}工廠運作模擬{% endblock %}
+
+{% block content %}
+<h2>工廠運作模擬</h2>
+
+<p>這裡會顯示訂單目前在產線中的進度（類似 UberEats 進度條）。</p>
+
+<div id="progress-visual">
+  <!-- 之後用 JS 動起來 -->
+  <ol>
+    <li>揀料：等待中</li>
+    <li>組裝：等待中</li>
+    <li>電性測試：等待中</li>
+    <li>包裝：等待中</li>
+  </ol>
+</div>
+{% endblock %}

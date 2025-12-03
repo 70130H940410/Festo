@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}下單頁 - 智慧工廠下單系統{% endblock %}
+
+{% block content %}
+<h2>產品下單</h2>
+<p class="text-muted">
+  請選擇要生產的產品與數量。系統會依照零件庫存（上蓋、下蓋、保險絲、電路板）進行檢查，
+  若庫存不足將無法進入下一步的製程規劃。
+</p>
+
+{# 提示訊息區：之後後端可以丟 error_message / success_message 進來 #}
+{% if error_message %}
+  <div class="alert alert-error">
+    {{ error_message }}
+  </div>
+{% endif %}
+
+{% if success_message %}
+  <div class="alert alert-success">
+    {{ success_message }}
+  </div>
+{% endif %}
+
+<form method="post">
+  <div class="card">
+    <h3>可下單產品列表</h3>
+    <p class="text-muted">
+      目前支援的產品將會對應到工廠中的上蓋、下蓋、保險絲與電路板組合。
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>產品名稱</th>
+          <th>描述</th>
+          <th>單價</th>
+          <th class="text-right">欲下單數量</th>
+        </tr>
+      </thead>
+      <tbody>
+        {# 之後由後端傳入 products，一筆一筆列出 #}
+        {% if products %}
+          {% for p in products %}
+          <tr>
+            <td>{{ p.name }}</td>
+            <td>{{ p.description or '—' }}</td>
+            <td>${{ "%.0f"|format(p.base_price) }}</td>
+            <td class="text-right">
+              <input
+                type="number"
+                name="qty_{{ p.id }}"
+                min="0"
+                value="0"
+              >
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="4" class="text-center text-muted">
+              目前尚未設定任何產品，請洽工廠管理者於後台新增。
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+
+    <p class="text-muted mb-2">
+      提醒：請輸入欲生產的數量，系統會在下一步檢查零件庫存是否足夠。
+      若數量為 0 的項目將不會被加入訂單。
+    </p>
+
+    <div class="text-right">
+      <button type="submit">下一步：製程規劃</button>
+    </div>
+  </div>
+</form>
+{% endblock %}
+

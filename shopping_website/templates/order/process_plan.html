@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}製程規劃 - 智慧工廠下單系統{% endblock %}
+
+{% block content %}
+<h2>製程規劃</h2>
+<p class="text-muted">
+  根據您剛才選擇的產品與數量，請設定本次訂單要使用的製程流程。
+  可以直接套用工廠預設的標準製程，或自行客製步驟與順序。
+</p>
+
+{# 若有錯誤訊息 / 提示，之後後端可帶進來 #}
+{% if error_message %}
+  <div class="alert alert-error">
+    {{ error_message }}
+  </div>
+{% endif %}
+
+{% if info_message %}
+  <div class="alert">
+    {{ info_message }}
+  </div>
+{% endif %}
+
+{# 簡單顯示目前訂單草稿內容（之後後端傳 order_items_summary 進來） #}
+{% if order_items_summary %}
+  <div class="card">
+    <h3>本次訂單內容</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>產品名稱</th>
+          <th class="text-right">數量</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in order_items_summary %}
+        <tr>
+          <td>{{ item.name }}</td>
+          <td class="text-right">{{ item.quantity }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+
+<form method="post">
+  <div class="card">
+    <h3>製程模式選擇</h3>
+
+    <label>
+      <input type="radio" name="process_mode" value="standard" checked>
+      套用標準製程（建議一般情況使用）
+    </label>
+    <p class="text-muted mt-1">
+      由工廠預先定義的標準流程，例如揀料 → 組裝 → 測試 → 包裝。
+    </p>
+
+    <label class="mt-2">
+      <input type="radio" name="process_mode" value="custom">
+      自行客製製程流程
+    </label>
+    <p class="text-muted mt-1">
+      適合有特殊檢驗、額外貼標或多次測試需求的訂單。
+    </p>
+  </div>
+
+  <div class="grid-2">
+    <!-- 左邊：標準製程預覽 -->
+    <section class="card">
+      <h3>標準製程預覽</h3>
+      <p class="text-muted">
+        以下為工廠預設之標準裝配流程，實際內容會由後端從資料庫載入。
+      </p>
+
+      <ul class="timeline">
+        {# 之後可由 process_template_steps 動態產生 #}
+        {% if standard_steps %}
+          {% for step in standard_steps %}
+          <li class="timeline-step pending">
+            {{ step.step_order }}. {{ step.step_name }}
+            {% if step.estimated_time_sec %}
+              <span class="text-muted">（約 {{ step.estimated_time_sec }} 秒）</span>
+            {% endif %}
+          </li>
+          {% endfor %}
+        {% else %}
+          <li class="timeline-step pending">1. 揀料（上蓋 / 下蓋 / 保險絲 / 電路板）</li>
+          <li class="timeline-step pending">2. 組裝</li>
+          <li class="timeline-step pending">3. 電性測試</li>
+          <li class="timeline-step pending">4. 包裝</li>
+        {% endif %}
+      </ul>
+    </section>
+
+    <!-- 右邊：客製流程編輯 -->
+    <section class="card">
+      <h3>客製製程（可選填）</h3>
+      <p class="text-muted">
+        若選擇「自行客製製程流程」，請在下方輸入客製步驟，一行一個步驟，
+        系統會依照行數自動產生步驟順序。
+      </p>
+
+      <textarea
+        name="custom_steps"
+        rows="8"
+        placeholder="範例：&#10;1. 特殊揀料（指定批號）&#10;2. 組裝&#10;3. 雙重電性測試&#10;4. 客製貼標&#10;5. 包裝"
+      >{% if custom_steps %}{{ custom_steps }}{% endif %}</textarea>
+    </section>
+  </div>
+
+  <div class="text-right mt-3">
+    <a class="btn btn-secondary" href="../order/order_page.html">返回修改數量</a>
+    <button type="submit">送出訂單並開始產線模擬</button>
+  </div>
+</form>
+{% endblock %}
+

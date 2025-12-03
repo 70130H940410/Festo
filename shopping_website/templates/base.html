@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>{% block title %}智慧工廠下單系統{% endblock %}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- 之後可以連到 static/css/base.css -->
+  <link rel="stylesheet" href="../static/css/base.css">
+</head>
+<body>
+  <!-- 導覽列 -->
+  <header>
+    <nav>
+      <a href="../templates/index.html">首頁</a>
+
+      <!-- 一般使用者前台 -->
+      <a href="../templates/order/order_page.html">我要下單</a>
+      <a href="{{ url_for('user.profile') }}">個人資料</a>
+
+      <!-- 管理者後台 -->
+      <a href="../templates/manager/inventory.html">庫存管理</a>
+      <a href="../templates/manager/process_templates.html">製程模板管理</a>
+
+      <!-- 登入 / 登出 -->
+      <span style="float: right;">
+        <a href="../templates/auth/login.html">登入</a>
+        <a href="{{ url_for('auth.logout') }}">登出</a>
+      </span>
+    </nav>
+  </header>
+
+  <!-- 主內容 -->
+  <main>
+    {% block content %}
+    {% endblock %}
+  </main>
+
+  <footer>
+    <small>智慧工廠遠端下單與製程模擬系統</small>
+  </footer>
+
+  <!-- 之後可以引入 JS -->
+  <!-- <script src="{{ url_for('static', filename='js/main.js') }}"></script> -->
+</body>
+</html>
+
