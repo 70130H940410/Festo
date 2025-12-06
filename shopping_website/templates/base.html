@@ -7,14 +7,20 @@
 
   <!-- 主樣式 -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
-  <!-- Loader 的樣式（一定要載，否則文字會跑到頁面上方） -->
+  <!-- Loader 樣式 -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/loader.css') }}">
 </head>
 <body data-page="{{ request.endpoint or '' }}">
   <!-- 首次進入首頁用 Loader -->
   <div id="page-loader">
     <div class="loader-card">
-      <div class="loader-logo-text">FESTO</div>
+      <div class="loader-logo-text">
+        <span class="loader-letter">F</span>
+        <span class="loader-letter">E</span>
+        <span class="loader-letter">S</span>
+        <span class="loader-letter">T</span>
+        <span class="loader-letter">O</span>
+      </div>
       <p class="loader-subtitle">歡迎來到智慧工廠遠端下單與製程模擬網站</p>
       <div class="loader-bar-wrapper">
         <div class="loader-bar"></div>
@@ -57,6 +63,8 @@
   <script src="{{ url_for('static', filename='js/loader.js') }}"></script>
 </body>
 </html>
+
+
 
 
 

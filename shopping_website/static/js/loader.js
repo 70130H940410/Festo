@@ -1,34 +1,40 @@
+// static/js/loader.js
+
 document.addEventListener("DOMContentLoaded", function () {
   const loader = document.getElementById("page-loader");
   if (!loader) return;
 
-  // 從 body 讀取目前頁面的 endpoint 名稱（例如 "index", "order.order_page"...）
+  // 從 <body data-page="..."> 讀目前是哪個 endpoint
   const page = document.body.dataset.page || "";
 
-  // 只在首頁 index 才啟用 Loader
-  const isIndex = (page === "index");
-  if (!isIndex) {
+  // ✅ 1. 只有首頁 index 才顯示 Loader
+  if (page !== "index") {
+    // 其它頁面一載入就直接關掉 Loader，不要閃一下
     loader.classList.add("hide");
     return;
   }
 
-  const SEEN_KEY = "festo_seen_index_v2";  // ← 換個 key，方便你重新測試
+  // ✅ 2. 首頁才需要顯示 Loader，這邊設定顯示 6000 ms（6 秒）
+  const DISPLAY_MS = 3000;
+  const startTime = performance.now();
 
-  // 如果已經看過一次首頁 Loader，就直接隱藏
-  const seen = window.localStorage.getItem(SEEN_KEY);
-  if (seen === "1") {
-    loader.classList.add("hide");
-    return;
+  function hideLoader() {
+    const elapsed = performance.now() - startTime;
+    const remain = DISPLAY_MS - elapsed;
+
+    if (remain <= 0) {
+      loader.classList.add("hide");
+    } else {
+      setTimeout(() => loader.classList.add("hide"), remain);
+    }
   }
 
-  // 第一次進首頁：記錄已看過，4 秒後淡出
-  window.localStorage.setItem(SEEN_KEY, "1");
-
-  // 這裡決定顯示多久（毫秒），4 秒 = 4000
-  setTimeout(function () {
-    loader.classList.add("hide");
-  }, 2000);
+  // 等整個頁面（含圖片、CSS）載完，再開始算 6 秒
+  window.addEventListener("load", hideLoader);
 });
+
+
+
 
 
 
