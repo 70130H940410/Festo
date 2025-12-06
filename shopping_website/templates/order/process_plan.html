@@ -1,167 +1,187 @@
 {% extends "base.html" %}
 
-{% block title %}製程模板管理 - 智慧工廠下單系統{% endblock %}
+{% block title %}製程規劃 - 智慧工廠下單系統{% endblock %}
 
 {% block content %}
-<h2>標準製程模板管理</h2>
+<h2>製程規劃</h2>
 <p class="text-muted">
-  工廠管理者可以在此維護標準製程流程。這些模板會在客戶下單時，作為預設的製程選項使用，
-  也可以再由客戶進一步客製化。
+  以下是本次訂單的產品與數量摘要，請為這批產品選擇或客製化對應的製程流程。
+  預設已套用工廠標準製程，您可以視需求調整步驟順序或新增額外步驟。
 </p>
 
-<div class="card">
-  <h3>選擇或建立製程模板</h3>
+<div class="grid-2">
+  <!-- 左側：訂單摘要 -->
+  <section class="card">
+    <h3>訂單摘要</h3>
+    <p class="text-muted mb-1">
+      來自上一個步驟的下單結果，實際系統中會由後端從 session 或暫存表讀出。
+    </p>
 
-  <div class="grid-2">
-    <div>
-      <label>
-        已有模板
-        <select name="template_id" id="template-select">
-          {% if process_templates %}
-            {% for t in process_templates %}
-              <option value="{{ t.id }}">{{ t.name }}</option>
-            {% endfor %}
-          {% else %}
-            <!-- 沒有後端資料時的示意選項 -->
-            <option value="1">標準保險絲盒裝配流程</option>
-            <option value="2">強化測試流程（高溫＋耐久）</option>
-          {% endif %}
-        </select>
-      </label>
-      <p class="text-muted mt-1">
-        ※ 目前切換模板僅為 UI 示意，將來可在選取時從後端載入對應步驟。
-      </p>
-    </div>
-
-    <div>
-      <label>
-        新模板名稱（選填）
-        <input type="text" id="new-template-name" placeholder="例如：快速出貨流程">
-      </label>
-      <p class="text-muted mt-1">
-        填寫新的模板名稱並調整下方步驟，就可以儲存為另一套標準流程（目前僅前端示意）。
-      </p>
-    </div>
-  </div>
-</div>
-
-<div class="card">
-  <h3>製程步驟編輯</h3>
-  <p class="text-muted">
-    可以直接在表格中修改步驟名稱與預估時間，並使用右側按鈕調整順序或刪除步驟。
-    「新增步驟」會在表格最後加入一列空白步驟。
-  </p>
-
-  <form id="template-form">
-    <table id="steps-table">
+    <table>
       <thead>
         <tr>
-          <th style="width: 60px;">順序</th>
-          <th>步驟名稱</th>
-          <th style="width: 130px;">預估時間（秒）</th>
-          <th style="width: 140px;">操作</th>
+          <th>產品名稱</th>
+          <th class="text-right">數量</th>
         </tr>
       </thead>
       <tbody>
-        {% if steps %}
-          {% for s in steps %}
+        {% if order_items_summary %}
+          {% for item in order_items_summary %}
           <tr>
-            <td class="text-center">
-              <span class="step-order">{{ s.step_order }}</span>
-            </td>
-            <td>
-              <input type="text" name="step_name[]" value="{{ s.step_name }}">
-            </td>
-            <td>
-              <input type="number" name="step_time[]" value="{{ s.estimated_time_sec or 0 }}" min="0">
-            </td>
-            <td class="text-center">
-              <button type="button" class="btn btn-secondary btn-move-up">↑</button>
-              <button type="button" class="btn btn-secondary btn-move-down">↓</button>
-              <button type="button" class="btn btn-danger btn-delete-step">刪除</button>
-            </td>
+            <td>{{ item.name }}</td>
+            <td class="text-right">{{ item.quantity }}</td>
           </tr>
           {% endfor %}
         {% else %}
-          <!-- 沒有後端資料時的示意步驟 -->
           <tr>
-            <td class="text-center">
-              <span class="step-order">1</span>
-            </td>
-            <td>
-              <input type="text" name="step_name[]" value="揀料（上蓋 / 下蓋 / 保險絲 / 電路板）">
-            </td>
-            <td>
-              <input type="number" name="step_time[]" value="5" min="0">
-            </td>
-            <td class="text-center">
-              <button type="button" class="btn btn-secondary btn-move-up">↑</button>
-              <button type="button" class="btn btn-secondary btn-move-down">↓</button>
-              <button type="button" class="btn btn-danger btn-delete-step">刪除</button>
-            </td>
-          </tr>
-          <tr>
-            <td class="text-center">
-              <span class="step-order">2</span>
-            </td>
-            <td>
-              <input type="text" name="step_name[]" value="組裝">
-            </td>
-            <td>
-              <input type="number" name="step_time[]" value="10" min="0">
-            </td>
-            <td class="text-center">
-              <button type="button" class="btn btn-secondary btn-move-up">↑</button>
-              <button type="button" class="btn btn-secondary btn-move-down">↓</button>
-              <button type="button" class="btn btn-danger btn-delete-step">刪除</button>
-            </td>
-          </tr>
-          <tr>
-            <td class="text-center">
-              <span class="step-order">3</span>
-            </td>
-            <td>
-              <input type="text" name="step_name[]" value="電性測試">
-            </td>
-            <td>
-              <input type="number" name="step_time[]" value="8" min="0">
-            </td>
-            <td class="text-center">
-              <button type="button" class="btn btn-secondary btn-move-up">↑</button>
-              <button type="button" class="btn btn-secondary btn-move-down">↓</button>
-              <button type="button" class="btn btn-danger btn-delete-step">刪除</button>
-            </td>
-          </tr>
-          <tr>
-            <td class="text-center">
-              <span class="step-order">4</span>
-            </td>
-            <td>
-              <input type="text" name="step_name[]" value="包裝">
-            </td>
-            <td>
-              <input type="number" name="step_time[]" value="5" min="0">
-            </td>
-            <td class="text-center">
-              <button type="button" class="btn btn-secondary btn-move-up">↑</button>
-              <button type="button" class="btn btn-secondary btn-move-down">↓</button>
-              <button type="button" class="btn btn-danger btn-delete-step">刪除</button>
-            </td>
+            <td>Basic Fuse Box - Black</td>
+            <td class="text-right">3</td>
           </tr>
         {% endif %}
       </tbody>
     </table>
 
-    <div class="mt-2 text-right">
-      <button type="button" class="btn btn-secondary" id="btn-add-step">新增步驟</button>
-      <button type="submit" class="btn">儲存模板（示意）</button>
+    <p class="text-muted">
+      ※ 實際系統中，下單完成後會在此檢視與確認最終製程，再送出給 MES。
+    </p>
+  </section>
+
+  <!-- 右側：製程規劃 -->
+  <section class="card">
+    <h3>本次訂單製程規劃</h3>
+    <p class="text-muted mb-1">
+      目前流程已套用標準製程，您可以：
+    </p>
+    <ul class="text-muted">
+      <li>修改步驟名稱（例如加註特殊檢查說明）</li>
+      <li>調整步驟順序（使用 ↑ / ↓ ）</li>
+      <li>新增自訂步驟（例如「高溫燒機測試」）</li>
+    </ul>
+
+    <div class="mb-2">
+      <button type="button" class="btn btn-secondary" id="btn-reset-standard">
+        恢復標準製程
+      </button>
+      <button type="button" class="btn" id="btn-add-step">
+        新增步驟
+      </button>
     </div>
-  </form>
+
+    <form id="process-form">
+      <table id="process-steps-table">
+        <thead>
+          <tr>
+            <th style="width: 60px;">順序</th>
+            <th>步驟名稱</th>
+            <th style="width: 130px;">預估時間（秒）</th>
+            <th style="width: 140px;">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if standard_steps %}
+            {% for s in standard_steps %}
+            <tr>
+              <td class="text-center">
+                <span class="step-order">{{ s.step_order }}</span>
+              </td>
+              <td>
+                <input type="text" name="step_name[]" value="{{ s.step_name }}">
+              </td>
+              <td>
+                <input type="number" name="step_time[]" value="{{ s.estimated_time_sec or 0 }}" min="0">
+              </td>
+              <td class="text-center">
+                <button type="button" class="btn btn-secondary btn-move-up">↑</button>
+                <button type="button" class="btn btn-secondary btn-move-down">↓</button>
+                <button type="button" class="btn btn-danger btn-delete-step">刪除</button>
+              </td>
+            </tr>
+            {% endfor %}
+          {% else %}
+            <!-- 若後端沒提供 standard_steps，使用預設示意資料 -->
+            <tr>
+              <td class="text-center">
+                <span class="step-order">1</span>
+              </td>
+              <td>
+                <input type="text" name="step_name[]" value="揀料（上蓋 / 下蓋 / 保險絲 / 電路板）">
+              </td>
+              <td>
+                <input type="number" name="step_time[]" value="5" min="0">
+              </td>
+              <td class="text-center">
+                <button type="button" class="btn btn-secondary btn-move-up">↑</button>
+                <button type="button" class="btn btn-secondary btn-move-down">↓</button>
+                <button type="button" class="btn btn-danger btn-delete-step">刪除</button>
+              </td>
+            </tr>
+            <tr>
+              <td class="text-center">
+                <span class="step-order">2</span>
+              </td>
+              <td>
+                <input type="text" name="step_name[]" value="組裝">
+              </td>
+              <td>
+                <input type="number" name="step_time[]" value="10" min="0">
+              </td>
+              <td class="text-center">
+                <button type="button" class="btn btn-secondary btn-move-up">↑</button>
+                <button type="button" class="btn btn-secondary btn-move-down">↓</button>
+                <button type="button" class="btn btn-danger btn-delete-step">刪除</button>
+              </td>
+            </tr>
+            <tr>
+              <td class="text-center">
+                <span class="step-order">3</span>
+              </td>
+              <td>
+                <input type="text" name="step_name[]" value="電性測試">
+              </td>
+              <td>
+                <input type="number" name="step_time[]" value="8" min="0">
+              </td>
+              <td class="text-center">
+                <button type="button" class="btn btn-secondary btn-move-up">↑</button>
+                <button type="button" class="btn btn-secondary btn-move-down">↓</button>
+                <button type="button" class="btn btn-danger btn-delete-step">刪除</button>
+              </td>
+            </tr>
+            <tr>
+              <td class="text-center">
+                <span class="step-order">4</span>
+              </td>
+              <td>
+                <input type="text" name="step_name[]" value="包裝">
+              </td>
+              <td>
+                <input type="number" name="step_time[]" value="5" min="0">
+              </td>
+              <td class="text-center">
+                <button type="button" class="btn btn-secondary btn-move-up">↑</button>
+                <button type="button" class="btn btn-secondary btn-move-down">↓</button>
+                <button type="button" class="btn btn-danger btn-delete-step">刪除</button>
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+
+      <div class="mt-2 text-right">
+        <a class="btn btn-secondary" href="{{ url_for('order_page') }}">
+          返回修改產品
+        </a>
+        <button type="submit" class="btn">
+          送出訂單（示意）
+        </button>
+      </div>
+    </form>
+  </section>
 </div>
 
 <script>
-  function renumberSteps() {
-    const rows = document.querySelectorAll('#steps-table tbody tr');
+  function renumberProcessSteps() {
+    const rows = document.querySelectorAll('#process-steps-table tbody tr');
     rows.forEach(function (row, index) {
       const cell = row.querySelector('.step-order');
       if (cell) {
@@ -170,8 +190,8 @@
     });
   }
 
-  function addStepRow() {
-    const tbody = document.querySelector('#steps-table tbody');
+  function addProcessStepRow() {
+    const tbody = document.querySelector('#process-steps-table tbody');
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td class="text-center">
@@ -190,16 +210,24 @@
       </td>
     `;
     tbody.appendChild(tr);
-    renumberSteps();
+    renumberProcessSteps();
   }
 
   document.addEventListener('DOMContentLoaded', function () {
-    const tbody = document.querySelector('#steps-table tbody');
+    const tbody = document.querySelector('#process-steps-table tbody');
     const addBtn = document.getElementById('btn-add-step');
-    const form = document.getElementById('template-form');
+    const resetBtn = document.getElementById('btn-reset-standard');
+    const form = document.getElementById('process-form');
 
     addBtn.addEventListener('click', function () {
-      addStepRow();
+      addProcessStepRow();
+    });
+
+    resetBtn.addEventListener('click', function () {
+      // 簡單做法：重新整理頁面，回到後端給的標準流程
+      if (confirm("確定要恢復為標準製程嗎？目前的修改會被還原。")) {
+        window.location.reload();
+      }
     });
 
     // 事件委派：處理上移、下移、刪除
@@ -212,28 +240,28 @@
         const prev = row.previousElementSibling;
         if (prev) {
           tbody.insertBefore(row, prev);
-          renumberSteps();
+          renumberProcessSteps();
         }
       } else if (target.classList.contains('btn-move-down')) {
         const next = row.nextElementSibling;
         if (next) {
           tbody.insertBefore(next, row);
-          renumberSteps();
+          renumberProcessSteps();
         }
       } else if (target.classList.contains('btn-delete-step')) {
         row.remove();
-        renumberSteps();
+        renumberProcessSteps();
       }
     });
 
-    // 目前先擋掉 submit，改成顯示提示（之後你可改成真正送到後端）
+    // 目前先擋下 submit，之後你要串 MES 再把這段改掉
     form.addEventListener('submit', function (event) {
       event.preventDefault();
-      alert("目前為前端示意介面，之後可將此表單串接後端，儲存到 process_templates / process_template_steps 資料表。");
+      alert("目前為前端示意：日後可將此流程內容送至後端建立 order_process_steps，並觸發 MES 執行。");
     });
 
     // 一開始先確保順序編號正確
-    renumberSteps();
+    renumberProcessSteps();
   });
 </script>
 {% endblock %}
