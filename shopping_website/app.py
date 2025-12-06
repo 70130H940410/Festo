@@ -1,30 +1,55 @@
-# app.py
-from flask import Flask, render_template
-from core.auth_routes import auth_bp
-from core.order_routes import order_bp
-from core.factory_routes import factory_bp
-from core.manager_routes import manager_bp
+# shopping_website/app.py
+import os
+
+from flask import Flask, render_template, session
+
+# === 專案路徑 & 資料庫路徑 ===
+BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+DATABASE_PRODUCT = os.path.join(BASE_DIR, "database", "product.db")
+DATABASE_USER = os.path.join(BASE_DIR, "database", "User_Data.db")
 
 
-def create_app():
+def create_app() -> Flask:
     app = Flask(__name__)
-    app.secret_key = "dev-key-change-this"
+    # 開發用的 secret key，之後要部署再換成環境變數
+    app.config["SECRET_KEY"] = "dev-secret-festo-112303537"
 
-    # 註冊所有 blueprint
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(order_bp)
-    app.register_blueprint(factory_bp)
-    app.register_blueprint(manager_bp)
+    # 把兩個資料庫路徑放到 config，給各個 Blueprint 用
+    app.config["DATABASE_PRODUCT"] = DATABASE_PRODUCT
+    app.config["DATABASE_USER"] = DATABASE_USER
 
+    # === 載入並註冊 Blueprints ===
+    from core.auth_routes import auth_bp
+    from core.order_routes import order_bp
+    from core.factory_routes import factory_bp
+    from core.manager_routes import manager_bp
+
+    app.register_blueprint(auth_bp)       # /login, /logout, /register...
+    app.register_blueprint(order_bp)      # /order/...
+    app.register_blueprint(factory_bp)    # /factory/...
+    app.register_blueprint(manager_bp)    # /manager/...
+
+    # === 首頁 ===
     @app.route("/")
     def index():
+        # base.html 裡已經用 {{ request.endpoint }} 設定 data-page
+        # Loader 會判斷 endpoint == "index" 才顯示一次動畫
         return render_template("index.html")
+
+    # === 給所有模板共用的變數（例如右上角顯示帳號） ===
+    @app.context_processor
+    def inject_user_info():
+        return {
+            "logged_in": bool(session.get("user_id")),
+            "current_account": session.get("account"),
+            "current_role": session.get("role"),
+        }
 
     return app
 
 
+# 直接 python app.py 執行時用這段
 if __name__ == "__main__":
     app = create_app()
+    # 開發階段開 debug 比較好除錯，之後部署再關掉
     app.run(debug=True)
-
-
