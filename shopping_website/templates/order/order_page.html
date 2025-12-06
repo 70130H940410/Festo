@@ -3,6 +3,243 @@
 {% block title %}我要下單 - 智慧工廠下單系統{% endblock %}
 
 {% block content %}
+<<<<<<< HEAD
+<h2>產品下單 (購物車模式)</h2>
+<p class="text-muted">
+  請選擇要生產的產品加入購物車，確認無誤後再送出訂單。
+</p>
+
+<!-- 顯示後端傳來的訊息 (Flash Messages) -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, message in messages %}
+      <div class="alert alert-{{ category }}">
+        {{ message }}
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<div class="row" style="display: flex; gap: 20px; flex-wrap: wrap;">
+    
+    <!-- 左側：選擇商品區 -->
+    <div class="card" style="flex: 1; min-width: 300px; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+        <h3>1. 加入商品</h3>
+        <div class="form-group">
+            <label>選擇產品：</label>
+            <select id="product-select" class="form-control" style="width: 100%; padding: 8px; margin-bottom: 10px;">
+                <option value="" disabled selected>-- 請選擇 --</option>
+                {# 利用後端傳來的 products 直接生成選項，不用等 API #}
+                {% if products %}
+                    {% for p in products %}
+                        {# 將產品詳細資訊藏在 data- attribute 中，方便 JS 讀取 #}
+                        <option 
+                            value="{{ p.id }}" 
+                            data-name="{{ p.name }}"
+                            data-price="{{ p.base_price }}"
+                            data-stock="{{ p.total }}"
+                            {% if p.total <= 0 %}disabled{% endif %}
+                        >
+                            {{ p.name }} (庫存: {{ p.total }}) - ${{ "%.0f"|format(p.base_price) }}
+                        </option>
+                    {% endfor %}
+                {% else %}
+                    <option disabled>目前無產品</option>
+                {% endif %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>數量：</label>
+            <div style="display: flex; gap: 10px;">
+                <input type="number" id="product-qty" value="1" min="1" class="form-control" style="flex: 1; padding: 8px;">
+                <button type="button" onclick="addToCart()" class="btn btn-primary" style="padding: 8px 16px; cursor: pointer;">加入清單</button>
+            </div>
+        </div>
+        <p id="stock-warning" style="color: red; font-size: 0.9em; display: none;">庫存不足！</p>
+    </div>
+
+    <!-- 右側：購物車清單區 -->
+    <div class="card" style="flex: 2; min-width: 300px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background-color: #f9f9f9;">
+        <h3>2. 待結帳清單</h3>
+        
+        <table class="table" style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="border-bottom: 2px solid #ccc;">
+                    <th style="text-align: left; padding: 8px;">品名</th>
+                    <th style="text-align: right; padding: 8px;">單價</th>
+                    <th style="text-align: center; padding: 8px;">數量</th>
+                    <th style="text-align: right; padding: 8px;">小計</th>
+                    <th style="text-align: center; padding: 8px;">操作</th>
+                </tr>
+            </thead>
+            <tbody id="cart-body">
+                <!-- JS 會把購買項目加在這裡 -->
+                <tr>
+                    <td colspan="5" class="text-center" style="padding: 20px; color: #777;">尚未加入任何商品</td>
+                </tr>
+            </tbody>
+            <tfoot>
+                <tr style="border-top: 2px solid #ccc;">
+                    <td colspan="3" class="text-right" style="padding: 10px;"><strong>總金額：</strong></td>
+                    <td class="text-right" style="padding: 10px;"><strong id="cart-total-price" style="font-size: 1.2em; color: #d9534f;">0</strong> 元</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <div class="text-right" style="margin-top: 20px; text-align: right;">
+            <button type="button" onclick="submitOrder()" class="btn btn-success" style="padding: 10px 20px; font-size: 1.1em; cursor: pointer;">確認送出訂單</button>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript 邏輯：處理購物車與 API -->
+<script>
+    // 購物車資料結構 (Array)
+    let cart = [];
+
+    // 加入購物車
+    function addToCart() {
+        const select = document.getElementById("product-select");
+        const qtyInput = document.getElementById("product-qty");
+        const warning = document.getElementById("stock-warning");
+
+        const pid = select.value;
+        const qty = parseInt(qtyInput.value);
+
+        // 基本驗證
+        if (!pid) {
+            alert("請選擇一項產品！");
+            return;
+        }
+        if (qty <= 0) {
+            alert("數量必須大於 0");
+            return;
+        }
+
+        // 取得選中 Option 的資料 (data- attributes)
+        const selectedOption = select.options[select.selectedIndex];
+        const name = selectedOption.getAttribute("data-name");
+        const price = parseFloat(selectedOption.getAttribute("data-price"));
+        const stock = parseInt(selectedOption.getAttribute("data-stock"));
+
+        // 檢查該商品是否已經在購物車裡
+        const existingItem = cart.find(item => item.id == pid);
+        const currentQtyInCart = existingItem ? existingItem.qty : 0;
+
+        // 檢查庫存 (前端先擋)
+        if (currentQtyInCart + qty > stock) {
+            warning.style.display = "block";
+            warning.innerText = `庫存不足！該產品剩餘 ${stock}，您購物車內已有 ${currentQtyInCart}，無法再加 ${qty}。`;
+            return;
+        } else {
+            warning.style.display = "none";
+        }
+
+        // 更新購物車陣列
+        if (existingItem) {
+            existingItem.qty += qty;
+        } else {
+            cart.push({
+                id: pid,
+                name: name,
+                price: price,
+                qty: qty
+            });
+        }
+
+        // 重置輸入框並重新渲染表格
+        qtyInput.value = 1;
+        renderCart();
+    }
+
+    // 渲染購物車表格
+    function renderCart() {
+        const tbody = document.getElementById("cart-body");
+        const totalSpan = document.getElementById("cart-total-price");
+        
+        // 清空表格
+        tbody.innerHTML = "";
+        
+        let totalPrice = 0;
+
+        if (cart.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding: 20px; color: #777;">尚未加入任何商品</td></tr>';
+            totalSpan.innerText = "0";
+            return;
+        }
+
+        cart.forEach((item, index) => {
+            const subtotal = item.price * item.qty;
+            totalPrice += subtotal;
+
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td style="padding: 8px;">${item.name}</td>
+                <td style="text-align: right; padding: 8px;">$${item.price}</td>
+                <td style="text-align: center; padding: 8px;">${item.qty}</td>
+                <td style="text-align: right; padding: 8px;">$${subtotal}</td>
+                <td style="text-align: center; padding: 8px;">
+                    <button onclick="removeItem(${index})" style="background: #d9534f; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">刪除</button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+
+        totalSpan.innerText = totalPrice;
+    }
+
+    // 移除單項商品
+    function removeItem(index) {
+        cart.splice(index, 1);
+        renderCart();
+    }
+
+    // 送出訂單 (API)
+    function submitOrder() {
+        if (cart.length === 0) {
+            alert("購物車是空的，無法結帳！");
+            return;
+        }
+
+        if (!confirm("確定要送出訂單嗎？")) return;
+
+        // 準備傳給後端的 JSON
+        const payload = {
+            cart: cart
+        };
+
+        // 發送 POST 請求到 /api/checkout
+        fetch('/api/checkout', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert("下單成功！");
+                // 清空購物車
+                cart = [];
+                renderCart();
+                // 導向歷史紀錄頁面
+                window.location.href = "/history";
+            } else {
+                alert("下單失敗：" + (data.message || "未知錯誤"));
+            }
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            alert("系統發生錯誤，請稍後再試。");
+        });
+    }
+</script>
+
+{% endblock %}
+=======
 <h2>我要下單</h2>
 <p class="text-muted">
   選擇本次要生產的產品與數量，下一步將進入製程規劃頁面，設定標準或客製流程。
@@ -55,3 +292,4 @@
 {% endblock %}
 
 
+>>>>>>> d3d99d309c302ef9fb96efd84fb89657e60ec7f0
