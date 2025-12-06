@@ -1,86 +1,55 @@
 {% extends "base.html" %}
 
-{% block title %}個人資料 - 智慧工廠下單系統{% endblock %}
+{% block title %}個人資料{% endblock %}
 
 {% block content %}
 <h2>個人資料</h2>
 <p class="text-muted">
-  您可以在此查看與更新帳號相關資訊。帳號固定用來登入，姓名則可作為顯示用名稱。
+  這裡可以查看與更新目前登入帳號的基本資料（帳號與 Email）。之後若資料表加入姓名欄位，也可以在這裡一起編輯。
 </p>
 
 {% if error_message %}
-  <div class="alert alert-error">{{ error_message }}</div>
+  <div class="alert alert-error">
+    {{ error_message }}
+  </div>
 {% endif %}
+
 {% if success_message %}
-  <div class="alert alert-success">{{ success_message }}</div>
+  <div class="alert alert-success">
+    {{ success_message }}
+  </div>
 {% endif %}
 
-<div class="grid-2">
-  <!-- 左：基本資料 -->
-  <div class="card">
-    <h3>基本資料</h3>
-    <p class="text-muted">
-      帳號名稱通常不允許修改；若有需要變更請聯絡系統管理者。
-    </p>
+{% if profile %}
+<form method="post">
+  <label>
+    帳號
+    <input type="text" name="account" value="{{ profile['account'] }}" required>
+  </label>
 
-    <form method="post">
-      <input type="hidden" name="action" value="update_profile">
+  <label>
+    Email
+    <input type="email" name="email" value="{{ profile['email'] or '' }}">
+  </label>
 
-      <label>
-        帳號（Username）
-        <input type="text" value="{{ user.username }}" disabled>
-      </label>
+  <label>
+    角色（僅供顯示）
+    <input type="text" value="{{ profile['role'] }}" disabled>
+  </label>
 
-      <label>
-        姓名
-        <input type="text" name="full_name" value="{{ user.full_name }}">
-      </label>
+  <label>
+    工廠負責人金鑰（僅供顯示）
+    <input type="text" value="{{ profile['registration_key'] or '' }}" disabled>
+  </label>
 
-      <label>
-        Email
-        <input type="email" name="email" value="{{ user.email }}">
-      </label>
-
-      <label>
-        身分
-        <input type="text" value="{% if user.role == 'manager' %}工廠管理者{% else %}一般使用者{% endif %}" disabled>
-      </label>
-
-      <div class="mt-2 text-right">
-        <button type="submit">儲存基本資料</button>
-      </div>
-    </form>
+  <div class="mt-2 text-right">
+    <button type="submit">儲存變更</button>
   </div>
-
-  <!-- 右：變更密碼 -->
-  <div class="card">
-    <h3>變更密碼</h3>
-    <p class="text-muted">
-      建議定期更換密碼，並避免與其他系統共用相同密碼。
-    </p>
-
-    <form method="post">
-      <input type="hidden" name="action" value="change_password">
-
-      <label>
-        目前密碼
-        <input type="password" name="current_password">
-      </label>
-
-      <label>
-        新密碼
-        <input type="password" name="new_password">
-      </label>
-
-      <label>
-        再次輸入新密碼
-        <input type="password" name="new_password_confirm">
-      </label>
-
-      <div class="mt-2 text-right">
-        <button type="submit">更新密碼</button>
-      </div>
-    </form>
-  </div>
-</div>
+</form>
+{% else %}
+  <p class="text-muted">
+    找不到目前使用者的資料，請重新登入後再試一次。
+  </p>
+{% endif %}
 {% endblock %}
+
