@@ -251,7 +251,7 @@
   </div>
 {% endif %}
 
-<form method="post">
+<form method="post" id="order-form">
   <table>
     <thead>
       <tr>
@@ -272,9 +272,11 @@
         <td class="text-right">
           <input
             type="number"
-            name="qty_{{ p.id }}"
+            class="order-qty-input"
+            data-product-name="{{ p.name }}"
             min="0"
             max="{{ p.stock }}"
+            name="qty_{{ p.id }}"
             value="0"
           >
         </td>
@@ -283,6 +285,14 @@
     </tbody>
   </table>
 
+  <!-- JS 用來即時顯示合計數量 / 提醒 -->
+  <div class="card mt-2" id="order-summary-card">
+    <h3>本次下單摘要</h3>
+    <p class="text-muted" id="order-summary-text">
+      目前尚未選擇任何產品。
+    </p>
+  </div>
+
   <div class="mt-2 text-right">
     <button type="submit" class="btn">
       前往製程規劃
@@ -290,6 +300,11 @@
   </div>
 </form>
 {% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('static', filename='js/order_page.js') }}"></script>
+{% endblock %}
+
 
 
 >>>>>>> d3d99d309c302ef9fb96efd84fb89657e60ec7f0

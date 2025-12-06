@@ -2,125 +2,90 @@
 
 {% block title %}工廠運作模擬 - 智慧工廠下單系統{% endblock %}
 
-{% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/factory.css') }}">
-{% endblock %}
-
 {% block content %}
-<h2>工廠運作模擬</h2>
-
+<h2>工廠運作模擬（Demo）</h2>
 <p class="text-muted">
-  本頁模擬 MES 執行本次訂單時的產線流程，並即時顯示各製程步驟的進度，
-  類似 Uber Eats 訂單的進度追蹤畫面。
+  這個頁面示意 MES / 產線實際運作時的流程進度。之後可以改成由 PLC / MES 回寫每個步驟狀態，
+  前端只要定期讀取資料庫並更新畫面即可。
 </p>
 
 <div class="card">
   <h3>訂單資訊</h3>
-  <p class="mb-1">
-    <strong>訂單編號：</strong>
-    {% if order_info and order_info.id %}
-      #{{ order_info.id }}
-    {% else %}
-      #00001（範例）
-    {% endif %}
+  <p class="text-muted">
+    以下為示意資料，未來會連動實際的訂單編號與下單人資訊。
   </p>
 
-  <p class="mb-1">
-    <strong>下單使用者：</strong>
-    {% if order_info and order_info.user_name %}
-      {{ order_info.user_name }}
-    {% else %}
-      Demo User
-    {% endif %}
-  </p>
-
-  <p class="mb-1">
-    <strong>訂單狀態：</strong>
-    {% if order_info and order_info.status %}
-      {{ order_info.status }}
-    {% else %}
-      in_progress（執行中）
-    {% endif %}
-  </p>
-
-  <p class="text-muted mb-0">
-    * 實際狀態將由後端依據 order_process_steps.status 更新，例如：pending / running / finished。
-  </p>
+  <table>
+    <tbody>
+      <tr>
+        <th style="width: 140px;">訂單編號</th>
+        <td>#{{ order_info.id }}</td>
+      </tr>
+      <tr>
+        <th>下單人</th>
+        <td>{{ order_info.user_name }}</td>
+      </tr>
+      <tr>
+        <th>目前狀態</th>
+        <td>
+          {% if order_info.status == "in_progress" %}
+            <span class="text-muted">產線進行中…</span>
+          {% elif order_info.status == "done" %}
+            <span class="text-muted">已完成</span>
+          {% else %}
+            <span class="text-muted">{{ order_info.status }}</span>
+          {% endif %}
+        </td>
+      </tr>
+    </tbody>
+  </table>
 </div>
 
 <div class="card">
-  <h3>產線進度總覽</h3>
+  <h3>製程步驟進度</h3>
+  <p class="text-muted">
+    綠色代表已完成、藍色代表進行中、灰色代表尚未開始。之後可以由 MES 寫回每個步驟的狀態欄位，
+    例如 <code>pending / running / finished</code>。
+  </p>
 
-  <div class="grid-2">
-    <div>
-      <p class="text-muted mb-1">
-        目前製程步驟狀態：
-      </p>
-      <ul class="timeline">
-        {% if steps %}
-          {% for s in steps %}
-          <li class="timeline-step {{ s.status|default('pending') }}">
-            {{ s.step_order }}. {{ s.step_name }}
-            {% if s.status == 'pending' %}
-              <span class="text-muted">（等待中）</span>
-            {% elif s.status == 'running' %}
-              <span class="text-muted">（進行中）</span>
-            {% elif s.status == 'finished' %}
-              <span class="text-muted">（已完成）</span>
-            {% endif %}
-          </li>
-          {% endfor %}
-        {% else %}
-          <li class="timeline-step finished">
-            1. 揀料（上蓋 / 下蓋 / 保險絲 / 電路板）
-            <span class="text-muted">（已完成）</span>
-          </li>
-          <li class="timeline-step running">
-            2. 組裝
-            <span class="text-muted">（進行中）</span>
-          </li>
-          <li class="timeline-step pending">
-            3. 電性測試
-            <span class="text-muted">（等待中）</span>
-          </li>
-          <li class="timeline-step pending">
-            4. 包裝
-            <span class="text-muted">（等待中）</span>
-          </li>
-        {% endif %}
-      </ul>
-    </div>
+  <ul class="timeline" id="timeline">
+    {% for s in steps %}
+    <li class="timeline-step {{ s.status }}">
+      <strong>Step {{ s.step_order }}：</strong> {{ s.step_name }}
+      {% if s.status == "finished" %}
+        <span class="text-muted">（已完成）</span>
+      {% elif s.status == "running" %}
+        <span class="text-muted">（進行中…）</span>
+      {% else %}
+        <span class="text-muted">（尚未開始）</span>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</div>
 
-    <div>
-      <p class="text-muted mb-1">
-        狀態顏色說明：
-      </p>
-      <ul>
-        <li>
-          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#dde2e8;margin-right:4px;"></span>
-          <span class="text-muted">灰色：等待中（pending）</span>
-        </li>
-        <li>
-          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#009fe3;box-shadow:0 0 0 4px rgba(0,159,227,0.2);margin-right:4px;"></span>
-          <span class="text-muted">藍色：進行中（running）</span>
-        </li>
-        <li>
-          <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22a053;margin-right:4px;"></span>
-          <span class="text-muted">綠色：已完成（finished）</span>
-        </li>
-      </ul>
+<div class="card">
+  <h3>下一步操作</h3>
+  <p class="text-muted">
+    Demo 版本中，你可以：
+  </p>
+  <ul class="text-muted">
+    <li>觀察流程時間軸樣式，作為期末報告操作示意</li>
+    <li>說明未來如何由 MES 端更新每個步驟的狀態</li>
+    <li>說明前端只要定期輪詢（polling）或用 WebSocket 就可以即時更新畫面</li>
+  </ul>
 
-      <p class="text-muted mt-2">
-        前端可以每隔數秒透過 JavaScript 呼叫後端 API 取得最新的步驟狀態，
-        例如 <code>/api/order_status/&lt;order_id&gt;</code>，再更新上方時間軸的 CSS class
-        （pending / running / finished），就能做出類 Uber Eats 的即時動畫效果。
-      </p>
-    </div>
+  <div class="mt-2 text-right">
+    <a class="btn btn-secondary" href="{{ url_for('order.order_page') }}">
+      返回重新下單
+    </a>
   </div>
 </div>
-
-<div class="text-right mt-3">
-  <a class="btn btn-secondary" href="{{ url_for('order_page') }}">返回重新下單</a>
-</div>
 {% endblock %}
+
+{% block scripts %}
+  {# 若之後要做 running 步驟點點跳動，可以在這裡載入 factory_simulate.js #}
+  {# <script src="{{ url_for('static', filename='js/factory_simulate.js') }}"></script> #}
+{% endblock %}
+
 
