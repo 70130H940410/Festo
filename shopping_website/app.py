@@ -160,7 +160,7 @@ def register_customer():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         email = request.form.get("email", "").strip()
-        full_name = request.form.get("full_name", "").strip()
+        full_name = request.form.get("full_name", "").strip()  # 目前不存 DB
 
         if not username or not password:
             error_message = "帳號與密碼為必填。"
@@ -220,7 +220,7 @@ def register_manager():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         email = request.form.get("email", "").strip()
-        full_name = request.form.get("full_name", "").strip()
+        full_name = request.form.get("full_name", "").strip()  # 目前不存 DB
         factory_key = request.form.get("factory_key", "").strip()
 
         if not username or not password or not factory_key:
@@ -316,7 +316,6 @@ def user_profile():
         action = request.form.get("action")
 
         if action == "update_profile":
-            full_name = request.form.get("full_name", "").strip()
             email = request.form.get("email", "").strip()
 
             # 1. 檢查這個 Email 有沒有被「其他帳號」使用
@@ -610,4 +609,5 @@ def manager_process_templates():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
