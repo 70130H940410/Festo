@@ -4,6 +4,7 @@
 import os
 import sqlite3
 import uuid
+from functools import wraps
 
 from flask import (
     Flask,
@@ -17,9 +18,9 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 
 app = Flask(__name__)
-app.secret_key = "dev-secret-key-change-later"
+app.secret_key = "dev-secret-key-change-later"  # 之後可以改成環境變數
 
-# === 資料庫路徑 ===
+# === 資料庫路徑設定 ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 USER_DB_PATH = os.path.join(BASE_DIR, "database", "User_Data.db")
@@ -27,12 +28,14 @@ PRODUCT_DB_PATH = os.path.join(BASE_DIR, "database", "product.db")
 
 
 def get_user_db():
+    """連到 User_Data.db（User_profile / registration_key）"""
     conn = sqlite3.connect(USER_DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def get_product_db():
+    """連到 product.db（products）"""
     conn = sqlite3.connect(PRODUCT_DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
@@ -44,10 +47,38 @@ def get_product_db():
 
 @app.route("/")
 def index():
+    """
+    首頁：
+    - 第一次進來 show_loader = True（給 index.html 顯示開場動畫）
+    """
     first_visit = not session.get("seen_index")
     if first_visit:
         session["seen_index"] = True
     return render_template("index.html", show_loader=first_visit)
+
+
+# =========================
+# 共用 decorator
+# =========================
+
+def login_required(view_func):
+    """需要登入才能看的頁面"""
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if not session.get("user_id"):
+            return redirect(url_for("login"))
+        return view_func(*args, **kwargs)
+    return wrapper
+
+
+def manager_required(view_func):
+    """必須是 manager 的頁面"""
+    @wraps(view_func)
+    def wrapper(*args, **kwargs):
+        if session.get("role") != "manager":
+            return redirect(url_for("login"))
+        return view_func(*args, **kwargs)
+    return wrapper
 
 
 # =========================
@@ -68,7 +99,7 @@ def login():
         else:
             conn = get_user_db()
             cur = conn.cursor()
-            # 用 account 欄位登入
+            # 用 account 欄位當登入帳號
             cur.execute(
                 """
                 SELECT id, account, password_hash, role
@@ -85,6 +116,7 @@ def login():
                 session["username"] = row["account"]
                 session["role"] = row["role"]
 
+                # 依角色導向
                 if row["role"] == "manager":
                     return redirect(url_for("manager_inventory"))
                 else:
@@ -106,7 +138,7 @@ def logout():
 
 
 # =========================
-# 一般使用者註冊
+# 註冊：一般使用者（customer）
 # =========================
 
 @app.route("/register/customer", methods=["GET", "POST"])
@@ -126,7 +158,7 @@ def register_customer():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         email = request.form.get("email", "").strip()
-        full_name = request.form.get("full_name", "").strip()  # 目前不存 DB，但先收下
+        full_name = request.form.get("full_name", "").strip()  # 目前不存 DB
 
         if not username or not password:
             error_message = "帳號與密碼為必填。"
@@ -134,7 +166,7 @@ def register_customer():
             conn = get_user_db()
             cur = conn.cursor()
 
-            # 用 account 檢查是否重複
+            # 檢查帳號是否重複（account 欄位）
             cur.execute(
                 "SELECT id FROM User_profile WHERE account = ?",
                 (username,),
@@ -170,14 +202,15 @@ def register_customer():
 
 
 # =========================
-# 管理者註冊（有金鑰）
+# 註冊：工廠管理者（manager，有金鑰）
 # =========================
 
 @app.route("/register/manager", methods=["GET", "POST"])
 def register_manager():
     """
     role = 'manager'
-    需要在 registration_key 表中找到對應的 registration_key
+    - 需要在 registration_key 表裡找到對應的 registration_key
+    - 註冊成功後，User_profile.registration_key 存該金鑰
     """
     error_message = None
 
@@ -194,7 +227,7 @@ def register_manager():
             conn = get_user_db()
             cur = conn.cursor()
 
-            # 1. 檢查金鑰是否存在 (registration_key 表)
+            # 1. 檢查金鑰是否存在 registration_key 表
             cur.execute(
                 """
                 SELECT Manager_name
@@ -209,7 +242,7 @@ def register_manager():
                 error_message = "工廠負責人金鑰錯誤，請確認後再試。"
                 conn.close()
             else:
-                # 2. 檢查帳號是否已存在
+                # 2. 檢查 account 是否已存在
                 cur.execute(
                     "SELECT id FROM User_profile WHERE account = ?",
                     (username,),
@@ -246,16 +279,16 @@ def register_manager():
 # =========================
 
 @app.route("/user/profile", methods=["GET", "POST"])
+@login_required
 def user_profile():
     """
     用 id 找 User_profile：
-    - account 當作 username 顯示
+    - account 當 username 顯示
     - email 可修改
-    - full_name 目前沒有存 DB，template 會拿到空字串
+    - 密碼可修改
+    - full_name 目前沒有存 DB，先給空字串
     """
     user_id = session.get("user_id")
-    if not user_id:
-        return redirect(url_for("login"))
 
     conn = get_user_db()
     cur = conn.cursor()
@@ -283,7 +316,6 @@ def user_profile():
 
         if action == "update_profile":
             email = request.form.get("email", "").strip()
-            # full_name 目前不寫入 DB
             cur.execute(
                 """
                 UPDATE User_profile
@@ -327,7 +359,7 @@ def user_profile():
                 conn.commit()
                 success_message = "密碼已更新。"
 
-    # 重新讀一次
+    # 重新讀一次最新資料
     cur.execute(
         """
         SELECT id, account, email, role
@@ -341,9 +373,9 @@ def user_profile():
 
     user = {
         "id": row["id"],
-        "username": row["account"],  # 給 template 用
+        "username": row["account"],
         "email": row["email"],
-        "full_name": "",             # 目前沒有存，先給空字串
+        "full_name": "",  # 目前未存
         "role": row["role"],
     }
 
@@ -356,11 +388,16 @@ def user_profile():
 
 
 # =========================
-# 下單 / 製程 / 模擬
+# 前台：下單 / 製程 / 模擬
 # =========================
 
 @app.route("/order", methods=["GET", "POST"])
+@login_required
 def order_page():
+    """
+    下單頁：
+    目前先只顯示 products 表內容，之後再加購物車 / 製程規劃。
+    """
     conn = get_product_db()
     cur = conn.cursor()
     cur.execute(
@@ -387,7 +424,13 @@ def order_page():
 
 
 @app.route("/process-plan", methods=["GET", "POST"])
+@login_required
 def process_plan():
+    """
+    製程規劃頁：
+    目前用 demo 的標準流程與訂單摘要，
+    之後會改成從 DB + session 讀取。
+    """
     standard_steps = [
         {"step_order": 1, "step_name": "揀料（上蓋 / 下蓋 / 保險絲 / 電路板）", "estimated_time_sec": 5},
         {"step_order": 2, "step_name": "組裝", "estimated_time_sec": 10},
@@ -407,7 +450,12 @@ def process_plan():
 
 
 @app.route("/factory/simulate")
+@login_required
 def factory_simulate():
+    """
+    工廠運作模擬頁：
+    目前用示意資料，之後接 MES / PLC 更新狀態。
+    """
     order_info = {
         "id": 1,
         "user_name": session.get("username", "Demo User"),
@@ -432,27 +480,23 @@ def factory_simulate():
 # 管理者後台
 # =========================
 
-def manager_required(view_func):
-    from functools import wraps
-
-    @wraps(view_func)
-    def wrapper(*args, **kwargs):
-        if session.get("role") != "manager":
-            return redirect(url_for("login"))
-        return view_func(*args, **kwargs)
-
-    return wrapper
-
-
 @app.route("/manager/inventory")
 @manager_required
 def manager_inventory():
+    """
+    庫存管理頁：
+    目前先純顯示 HTML，之後再接 inventory 表。
+    """
     return render_template("manager/inventory.html")
 
 
 @app.route("/manager/process-templates")
 @manager_required
 def manager_process_templates():
+    """
+    製程模板管理頁：
+    先用 demo 資料顯示表格。
+    """
     templates = [
         {
             "id": 1,
@@ -484,7 +528,7 @@ def manager_process_templates():
 
 
 # =========================
-# 入口
+# 主程式入口
 # =========================
 
 if __name__ == "__main__":

@@ -4,32 +4,44 @@
   <meta charset="UTF-8">
   <title>{% block title %}智慧工廠下單系統{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-  <!-- 全站共用樣式 -->
+  <!-- 主要樣式 -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
-
-  <!-- 各頁面額外的 CSS -->
-  {% block extra_css %}{% endblock %}
 </head>
 <body>
   <!-- 導覽列 -->
   <header>
     <nav>
+      <!-- 左側固定選單 -->
       <a href="{{ url_for('index') }}">首頁</a>
 
-      <!-- 一般使用者前台 -->
-      <a href="{{ url_for('order_page') }}">我要下單</a>
-      <a href="{{ url_for('user_profile') }}">個人資料</a>
+      {% if session.get('user_id') %}
+        <!-- 已登入的使用者才看的到 -->
 
-      <!-- 管理者後台 -->
-      <a href="{{ url_for('manager_inventory') }}">庫存管理</a>
-      <a href="{{ url_for('manager_process_templates') }}">製程模板管理</a>
+        <!-- 一般使用者前台 -->
+        <a href="{{ url_for('order_page') }}">我要下單</a>
+        <a href="{{ url_for('user_profile') }}">個人資料</a>
 
-      <!-- 登入 / 登出 -->
-      <span>
-        <a href="{{ url_for('login') }}">登入</a>
-        <a href="{{ url_for('logout') }}">登出</a>
-      </span>
+        <!-- 管理者後台：只有 role == manager 才顯示 -->
+        {% if session.get('role') == 'manager' %}
+          <a href="{{ url_for('manager_inventory') }}">庫存管理</a>
+          <a href="{{ url_for('manager_process_templates') }}">製程模板管理</a>
+        {% endif %}
+
+        <!-- 右側：使用者名稱 + 登出 -->
+        <span>
+          <span style="opacity: 0.8; margin-right: 0.4rem;">
+            👤 {{ session.get('username') }}
+          </span>
+          <a href="{{ url_for('logout') }}">登出</a>
+        </span>
+
+      {% else %}
+        <!-- 未登入時：右上角只有登入 / 註冊 -->
+        <span>
+          <a href="{{ url_for('login') }}">登入</a>
+          <a href="{{ url_for('register_customer') }}">註冊</a>
+        </span>
+      {% endif %}
     </nav>
   </header>
 
@@ -42,8 +54,12 @@
   <footer>
     <small>智慧工廠遠端下單與製程模擬系統</small>
   </footer>
+
+  <!-- 如有全域 JS 可以放這裡 -->
+  <!-- <script src="{{ url_for('static', filename='js/main.js') }}"></script> -->
 </body>
 </html>
+
 
 
 
