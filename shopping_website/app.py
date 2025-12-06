@@ -53,3 +53,17 @@ if __name__ == "__main__":
     app = create_app()
     # 開發階段開 debug 比較好除錯，之後部署再關掉
     app.run(debug=True)
+
+@auth_bp.route("/debug_db")
+def debug_db():
+  from .db import get_user_db
+
+  conn = get_user_db()
+  cur = conn.cursor()
+  cur.execute("SELECT id, account FROM User_profile LIMIT 5")
+  rows = cur.fetchall()
+  conn.close()
+
+  # 直接用最簡單的方式回傳看看
+  lines = [f"{row['id']} - {row['account']}" for row in rows]
+  return "<br>".join(lines) or "no rows"
