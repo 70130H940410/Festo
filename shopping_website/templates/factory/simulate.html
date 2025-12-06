@@ -2,6 +2,10 @@
 
 {% block title %}工廠運作模擬 - 智慧工廠下單系統{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/factory.css') }}">
+{% endblock %}
+
 {% block content %}
 <h2>工廠運作模擬</h2>
 
@@ -10,7 +14,6 @@
   類似 Uber Eats 訂單的進度追蹤畫面。
 </p>
 
-{# 訂單基本資訊小卡片 #}
 <div class="card">
   <h3>訂單資訊</h3>
   <p class="mb-1">
@@ -45,7 +48,6 @@
   </p>
 </div>
 
-{# 視覺化進度條 + 狀態說明 #}
 <div class="card">
   <h3>產線進度總覽</h3>
 
@@ -55,7 +57,6 @@
         目前製程步驟狀態：
       </p>
       <ul class="timeline">
-        {# 後端可以直接傳 steps = [ { step_order, step_name, status }, ... ] #}
         {% if steps %}
           {% for s in steps %}
           <li class="timeline-step {{ s.status|default('pending') }}">
@@ -70,7 +71,6 @@
           </li>
           {% endfor %}
         {% else %}
-          {# 沒有後端資料時，用範例假資料 #}
           <li class="timeline-step finished">
             1. 揀料（上蓋 / 下蓋 / 保險絲 / 電路板）
             <span class="text-muted">（已完成）</span>
@@ -119,10 +119,8 @@
   </div>
 </div>
 
-{# 底部操作區（之後可以接「模擬下一步」或返回訂單列表」） #}
 <div class="text-right mt-3">
-  <a class="btn btn-secondary" href="../order/order_page.html">返回重新下單</a>
-  {# 之後若要做「模擬 MES 往下一步」可以打開這顆按鈕 #}
-  {# <button class="btn" type="button">模擬產線前進一步</button> #}
+  <a class="btn btn-secondary" href="{{ url_for('order_page') }}">返回重新下單</a>
 </div>
 {% endblock %}
+

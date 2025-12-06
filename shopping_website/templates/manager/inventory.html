@@ -1,26 +1,150 @@
 {% extends "base.html" %}
 
-{% block title %}庫存管理{% endblock %}
+{% block title %}庫存管理 - 智慧工廠下單系統{% endblock %}
 
 {% block content %}
 <h2>庫存管理</h2>
+<p class="text-muted">
+  本頁提供工廠管理者檢視與調整零件庫存，包括上蓋、下蓋、保險絲與電路板。
+  目前僅為前端介面展示，之後可串接資料庫與實際修改功能。
+</p>
 
-<p>顯示各項零件庫存（上蓋、下蓋、保險絲、電路板）。之後會從資料庫帶資料。</p>
+<div class="card">
+  <h3>篩選條件（前端示意）</h3>
+  <div class="grid-2">
+    <div>
+      <label>
+        類型
+        <select name="filter_type">
+          <option value="">全部</option>
+          <option value="top_cover">top_cover（上蓋）</option>
+          <option value="bottom_cover">bottom_cover（下蓋）</option>
+          <option value="fuse">fuse（保險絲）</option>
+          <option value="pcb">pcb（電路板）</option>
+        </select>
+      </label>
+    </div>
+    <div>
+      <label>
+        位置
+        <select name="filter_location">
+          <option value="">全部</option>
+          <option value="warehouse">warehouse（倉儲）</option>
+          <option value="robot_room">robot_room（機器人室）</option>
+          <option value="box">box（盒匣）</option>
+        </select>
+      </label>
+    </div>
+  </div>
+  <p class="text-muted mt-1">
+    ※ 目前僅為 UI 示意，尚未實作實際篩選邏輯。之後可配合後端查詢條件使用。
+  </p>
+</div>
 
-<table border="1" cellpadding="5">
-  <tr>
-    <th>類型</th>
-    <th>顏色</th>
-    <th>位置</th>
-    <th>數量</th>
-  </tr>
-  <tr>
-    <td>top_cover</td>
-    <td>black</td>
-    <td>warehouse</td>
-    <td>50</td>
-  </tr>
-</table>
+<div class="card">
+  <h3>庫存列表</h3>
 
-<p>之後可以在這裡加「新增 / 修改庫存」的表單。</p>
+  <table>
+    <thead>
+      <tr>
+        <th>類型</th>
+        <th>顏色</th>
+        <th>位置</th>
+        <th class="text-right">數量</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if inventory_items %}
+        {% for item in inventory_items %}
+        <tr>
+          <td>{{ item.item_type }}</td>
+          <td>{{ item.color or '—' }}</td>
+          <td>{{ item.location }}</td>
+          <td class="text-right">{{ item.quantity }}</td>
+        </tr>
+        {% endfor %}
+      {% else %}
+        <!-- 沒有後端資料時的示意假資料 -->
+        <tr>
+          <td>top_cover</td>
+          <td>black</td>
+          <td>warehouse</td>
+          <td class="text-right">50</td>
+        </tr>
+        <tr>
+          <td>top_cover</td>
+          <td>blue</td>
+          <td>warehouse</td>
+          <td class="text-right">40</td>
+        </tr>
+        <tr>
+          <td>bottom_cover</td>
+          <td>—</td>
+          <td>box</td>
+          <td class="text-right">100</td>
+        </tr>
+        <tr>
+          <td>fuse</td>
+          <td>—</td>
+          <td>robot_room</td>
+          <td class="text-right">100</td>
+        </tr>
+        <tr>
+          <td>pcb</td>
+          <td>—</td>
+          <td>robot_room</td>
+          <td class="text-right">100</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h3>新增 / 調整庫存（介面示意）</h3>
+  <p class="text-muted">
+    之後可將此表單串接後端 API，用於新增零件庫存或調整盤點後的數量。
+  </p>
+
+  <form>
+    <div class="grid-2">
+      <div>
+        <label>
+          類型
+          <select name="item_type">
+            <option value="top_cover">top_cover（上蓋）</option>
+            <option value="bottom_cover">bottom_cover（下蓋）</option>
+            <option value="fuse">fuse（保險絲）</option>
+            <option value="pcb">pcb（電路板）</option>
+          </select>
+        </label>
+
+        <label>
+          顏色（無則可留空）
+          <input type="text" name="color" placeholder="例如：black / blue / white">
+        </label>
+      </div>
+
+      <div>
+        <label>
+          位置
+          <select name="location">
+            <option value="warehouse">warehouse（倉儲）</option>
+            <option value="robot_room">robot_room（機器人室）</option>
+            <option value="box">box（盒匣）</option>
+          </select>
+        </label>
+
+        <label>
+          數量（正數代表增加，負數代表減少）
+          <input type="number" name="delta_quantity" value="0">
+        </label>
+      </div>
+    </div>
+
+    <div class="text-right mt-2">
+      <button type="button" class="btn">送出調整（示意）</button>
+    </div>
+  </form>
+</div>
 {% endblock %}

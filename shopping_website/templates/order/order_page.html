@@ -9,24 +9,18 @@
   若庫存不足將無法進入下一步的製程規劃。
 </p>
 
-{# 提示訊息區：之後後端可以丟 error_message / success_message 進來 #}
 {% if error_message %}
   <div class="alert alert-error">
     {{ error_message }}
   </div>
 {% endif %}
 
-{% if success_message %}
-  <div class="alert alert-success">
-    {{ success_message }}
-  </div>
-{% endif %}
-
-<form method="post">
+<form method="post" id="order-form">
   <div class="card">
     <h3>可下單產品列表</h3>
     <p class="text-muted">
       目前支援的產品將會對應到工廠中的上蓋、下蓋、保險絲與電路板組合。
+      數量為 0 的項目不會被加入訂單。
     </p>
 
     <table>
@@ -39,7 +33,6 @@
         </tr>
       </thead>
       <tbody>
-        {# 之後由後端傳入 products，一筆一筆列出 #}
         {% if products %}
           {% for p in products %}
           <tr>
@@ -52,6 +45,8 @@
                 name="qty_{{ p.id }}"
                 min="0"
                 value="0"
+                class="qty-input"
+                data-price="{{ p.base_price }}"
               >
             </td>
           </tr>
@@ -66,15 +61,57 @@
       </tbody>
     </table>
 
-    <p class="text-muted mb-2">
-      提醒：請輸入欲生產的數量，系統會在下一步檢查零件庫存是否足夠。
-      若數量為 0 的項目將不會被加入訂單。
-    </p>
-
-    <div class="text-right">
-      <button type="submit">下一步：製程規劃</button>
+    <!-- 下方摘要區 -->
+    <div class="grid-2">
+      <div class="text-muted">
+        <p class="mb-1"><strong>下單提醒</strong></p>
+        <ul>
+          <li>系統會在下一步再次檢查零件庫存是否足夠。</li>
+          <li>庫存不足的商品將無法建立訂單。</li>
+        </ul>
+      </div>
+      <div class="text-right">
+        <p class="mb-1">
+          <strong>總數量：</strong>
+          <span id="summary-qty">0</span> 件
+        </p>
+        <p class="mb-2">
+          <strong>預估總金額：</strong>
+          $<span id="summary-total">0</span>
+        </p>
+        <button type="submit">下一步：製程規劃</button>
+      </div>
     </div>
   </div>
 </form>
+
+<!-- 前端即時計算總數量＆金額的腳本 -->
+<script>
+  function updateOrderSummary() {
+    const qtyInputs = document.querySelectorAll('.qty-input');
+    let totalQty = 0;
+    let totalPrice = 0;
+
+    qtyInputs.forEach(function (input) {
+      const qty = parseInt(input.value, 10) || 0;
+      const price = parseFloat(input.getAttribute('data-price')) || 0;
+      totalQty += qty;
+      totalPrice += qty * price;
+    });
+
+    document.getElementById('summary-qty').textContent = totalQty;
+    document.getElementById('summary-total').textContent = totalPrice.toFixed(0);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    const qtyInputs = document.querySelectorAll('.qty-input');
+    qtyInputs.forEach(function (input) {
+      input.addEventListener('input', updateOrderSummary);
+    });
+    // 一開始先算一次
+    updateOrderSummary();
+  });
+</script>
 {% endblock %}
+
 
