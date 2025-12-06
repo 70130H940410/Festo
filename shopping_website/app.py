@@ -3,6 +3,7 @@
 
 import os
 import sqlite3
+import uuid
 
 from flask import (
     Flask,
@@ -16,26 +17,22 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 
 app = Flask(__name__)
-app.secret_key = "dev-secret-key-change-later"  # 之後可以改成環境變數或 .env
+app.secret_key = "dev-secret-key-change-later"
 
-# === 資料庫路徑設定 ===
+# === 資料庫路徑 ===
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 使用者 / 金鑰 → User_Data.db
 USER_DB_PATH = os.path.join(BASE_DIR, "database", "User_Data.db")
-# 產品 / 庫存 → product.db
 PRODUCT_DB_PATH = os.path.join(BASE_DIR, "database", "product.db")
 
 
 def get_user_db():
-    """連到 User_Data.db（User_profile / registration_key 用）"""
     conn = sqlite3.connect(USER_DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def get_product_db():
-    """連到 product.db（products 用）"""
     conn = sqlite3.connect(PRODUCT_DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
@@ -47,19 +44,14 @@ def get_product_db():
 
 @app.route("/")
 def index():
-    """
-    首頁：
-    - 第一次進來才顯示 FESTO loader 動畫（index.html 裡的 show_loader）
-    """
     first_visit = not session.get("seen_index")
     if first_visit:
         session["seen_index"] = True
-
     return render_template("index.html", show_loader=first_visit)
 
 
 # =========================
-# 認證 / 會員系統
+# 登入 / 登出
 # =========================
 
 @app.route("/login", methods=["GET", "POST"])
@@ -76,11 +68,12 @@ def login():
         else:
             conn = get_user_db()
             cur = conn.cursor()
+            # 用 account 欄位登入
             cur.execute(
                 """
-                SELECT id, username, password_hash, role
+                SELECT id, account, password_hash, role
                 FROM User_profile
-                WHERE username = ?
+                WHERE account = ?
                 """,
                 (username,),
             )
@@ -88,12 +81,10 @@ def login():
             conn.close()
 
             if row and check_password_hash(row["password_hash"], password):
-                # 登入成功，寫入 session
                 session["user_id"] = row["id"]
-                session["username"] = row["username"]
+                session["username"] = row["account"]
                 session["role"] = row["role"]
 
-                # 依角色導向不同頁面
                 if row["role"] == "manager":
                     return redirect(url_for("manager_inventory"))
                 else:
@@ -101,7 +92,6 @@ def login():
             else:
                 error_message = "帳號或密碼錯誤。"
 
-    # 若是註冊成功後 redirect 來這裡，也可以透過 query string 或 template 傳 success_message
     return render_template(
         "auth/login.html",
         error_message=error_message,
@@ -115,11 +105,20 @@ def logout():
     return redirect(url_for("index"))
 
 
+# =========================
+# 一般使用者註冊
+# =========================
+
 @app.route("/register/customer", methods=["GET", "POST"])
 def register_customer():
     """
-    一般使用者註冊：role = 'customer'
-    寫入 User_profile
+    寫入 User_profile：
+    - id: uuid4 字串
+    - account: 使用者帳號
+    - email
+    - password_hash
+    - role: 'customer'
+    - registration_key: NULL
     """
     error_message = None
 
@@ -127,7 +126,7 @@ def register_customer():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         email = request.form.get("email", "").strip()
-        full_name = request.form.get("full_name", "").strip()
+        full_name = request.form.get("full_name", "").strip()  # 目前不存 DB，但先收下
 
         if not username or not password:
             error_message = "帳號與密碼為必填。"
@@ -135,9 +134,9 @@ def register_customer():
             conn = get_user_db()
             cur = conn.cursor()
 
-            # 檢查帳號有沒有被用過
+            # 用 account 檢查是否重複
             cur.execute(
-                "SELECT id FROM User_profile WHERE username = ?",
+                "SELECT id FROM User_profile WHERE account = ?",
                 (username,),
             )
             exists = cur.fetchone()
@@ -146,14 +145,15 @@ def register_customer():
                 error_message = "此帳號已被使用，請換一個。"
                 conn.close()
             else:
+                user_id = uuid.uuid4().hex
                 password_hash = generate_password_hash(password)
                 cur.execute(
                     """
                     INSERT INTO User_profile
-                        (username, password_hash, email, full_name, role)
-                    VALUES (?, ?, ?, ?, 'customer')
+                        (id, account, email, password_hash, role, registration_key)
+                    VALUES (?, ?, ?, ?, 'customer', NULL)
                     """,
-                    (username, password_hash, email, full_name),
+                    (user_id, username, email, password_hash),
                 )
                 conn.commit()
                 conn.close()
@@ -169,11 +169,15 @@ def register_customer():
     )
 
 
+# =========================
+# 管理者註冊（有金鑰）
+# =========================
+
 @app.route("/register/manager", methods=["GET", "POST"])
 def register_manager():
     """
-    工廠管理者註冊：role = 'manager'
-    需要先驗證 registration_key.Key_code
+    role = 'manager'
+    需要在 registration_key 表中找到對應的 registration_key
     """
     error_message = None
 
@@ -181,7 +185,7 @@ def register_manager():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         email = request.form.get("email", "").strip()
-        full_name = request.form.get("full_name", "").strip()
+        full_name = request.form.get("full_name", "").strip()  # 目前不存 DB
         factory_key = request.form.get("factory_key", "").strip()
 
         if not username or not password or not factory_key:
@@ -190,12 +194,12 @@ def register_manager():
             conn = get_user_db()
             cur = conn.cursor()
 
-            # 1. 檢查金鑰是否存在
+            # 1. 檢查金鑰是否存在 (registration_key 表)
             cur.execute(
                 """
                 SELECT Manager_name
                 FROM registration_key
-                WHERE Key_code = ?
+                WHERE registration_key = ?
                 """,
                 (factory_key,),
             )
@@ -207,7 +211,7 @@ def register_manager():
             else:
                 # 2. 檢查帳號是否已存在
                 cur.execute(
-                    "SELECT id FROM User_profile WHERE username = ?",
+                    "SELECT id FROM User_profile WHERE account = ?",
                     (username,),
                 )
                 exists = cur.fetchone()
@@ -216,14 +220,15 @@ def register_manager():
                     error_message = "此帳號已被使用，請換一個。"
                     conn.close()
                 else:
+                    user_id = uuid.uuid4().hex
                     password_hash = generate_password_hash(password)
                     cur.execute(
                         """
                         INSERT INTO User_profile
-                            (username, password_hash, email, full_name, role)
-                        VALUES (?, ?, ?, ?, 'manager')
+                            (id, account, email, password_hash, role, registration_key)
+                        VALUES (?, ?, ?, ?, 'manager', ?)
                         """,
-                        (username, password_hash, email, full_name),
+                        (user_id, username, email, password_hash, factory_key),
                     )
                     conn.commit()
                     conn.close()
@@ -236,13 +241,17 @@ def register_manager():
     )
 
 
+# =========================
+# 個人資料頁
+# =========================
+
 @app.route("/user/profile", methods=["GET", "POST"])
 def user_profile():
     """
-    個人資料頁：
-    - 顯示 username / email / full_name / role
-    - 可修改基本資料
-    - 可變更密碼
+    用 id 找 User_profile：
+    - account 當作 username 顯示
+    - email 可修改
+    - full_name 目前沒有存 DB，template 會拿到空字串
     """
     user_id = session.get("user_id")
     if not user_id:
@@ -251,10 +260,9 @@ def user_profile():
     conn = get_user_db()
     cur = conn.cursor()
 
-    # 先讀目前資料
     cur.execute(
         """
-        SELECT id, username, email, full_name, role
+        SELECT id, account, email, role
         FROM User_profile
         WHERE id = ?
         """,
@@ -274,16 +282,15 @@ def user_profile():
         action = request.form.get("action")
 
         if action == "update_profile":
-            full_name = request.form.get("full_name", "").strip()
             email = request.form.get("email", "").strip()
-
+            # full_name 目前不寫入 DB
             cur.execute(
                 """
                 UPDATE User_profile
-                SET full_name = ?, email = ?
+                SET email = ?
                 WHERE id = ?
                 """,
-                (full_name, email, user_id),
+                (email, user_id),
             )
             conn.commit()
             success_message = "基本資料已更新。"
@@ -320,10 +327,10 @@ def user_profile():
                 conn.commit()
                 success_message = "密碼已更新。"
 
-    # 再抓一次最新資料
+    # 重新讀一次
     cur.execute(
         """
-        SELECT id, username, email, full_name, role
+        SELECT id, account, email, role
         FROM User_profile
         WHERE id = ?
         """,
@@ -334,9 +341,9 @@ def user_profile():
 
     user = {
         "id": row["id"],
-        "username": row["username"],
+        "username": row["account"],  # 給 template 用
         "email": row["email"],
-        "full_name": row["full_name"],
+        "full_name": "",             # 目前沒有存，先給空字串
         "role": row["role"],
     }
 
@@ -349,15 +356,11 @@ def user_profile():
 
 
 # =========================
-# 前台：下單 / 製程規劃 / 工廠模擬
+# 下單 / 製程 / 模擬
 # =========================
 
 @app.route("/order", methods=["GET", "POST"])
 def order_page():
-    """
-    下單頁：
-    目前先只顯示產品列表，後續再加購物車 / 製程規劃串接。
-    """
     conn = get_product_db()
     cur = conn.cursor()
     cur.execute(
@@ -385,12 +388,6 @@ def order_page():
 
 @app.route("/process-plan", methods=["GET", "POST"])
 def process_plan():
-    """
-    製程規劃頁：
-    目前用 demo 的 standard_steps，
-    之後可以改成從資料庫 process_templates 讀取。
-    """
-    # demo 用：標準製程（之後可從 DB 讀）
     standard_steps = [
         {"step_order": 1, "step_name": "揀料（上蓋 / 下蓋 / 保險絲 / 電路板）", "estimated_time_sec": 5},
         {"step_order": 2, "step_name": "組裝", "estimated_time_sec": 10},
@@ -398,12 +395,10 @@ def process_plan():
         {"step_order": 4, "step_name": "包裝", "estimated_time_sec": 5},
     ]
 
-    # demo 用：訂單摘要（實際上應由 session 或暫存表取得）
     order_items_summary = [
         {"name": "Basic Fuse Box - Black", "quantity": 3},
     ]
 
-    # 目前先讓前端 JS 接管，不真正寫入 DB
     return render_template(
         "order/process_plan.html",
         standard_steps=standard_steps,
@@ -413,18 +408,12 @@ def process_plan():
 
 @app.route("/factory/simulate")
 def factory_simulate():
-    """
-    工廠運作模擬頁：
-    目前用示意資料，之後可以接 MES 更新 order_process_steps 狀態。
-    """
-    # demo 用：訂單資訊
     order_info = {
         "id": 1,
         "user_name": session.get("username", "Demo User"),
         "status": "in_progress",
     }
 
-    # demo 用：製程步驟與狀態
     steps = [
         {"step_order": 1, "step_name": "揀料（上蓋 / 下蓋 / 保險絲 / 電路板）", "status": "finished"},
         {"step_order": 2, "step_name": "組裝", "status": "running"},
@@ -440,20 +429,15 @@ def factory_simulate():
 
 
 # =========================
-# 後台：庫存管理 / 製程模板管理（manager）
+# 管理者後台
 # =========================
 
 def manager_required(view_func):
-    """
-    簡單的 manager 權限檢查 decorator。
-    必須登入且 role == 'manager'
-    """
     from functools import wraps
 
     @wraps(view_func)
     def wrapper(*args, **kwargs):
-        role = session.get("role")
-        if role != "manager":
+        if session.get("role") != "manager":
             return redirect(url_for("login"))
         return view_func(*args, **kwargs)
 
@@ -463,21 +447,12 @@ def manager_required(view_func):
 @app.route("/manager/inventory")
 @manager_required
 def manager_inventory():
-    """
-    庫存管理頁：
-    目前先單純 render template，之後再把 inventory 表接上。
-    """
     return render_template("manager/inventory.html")
 
 
 @app.route("/manager/process-templates")
 @manager_required
 def manager_process_templates():
-    """
-    製程模板管理頁：
-    目前先用示意資料顯示表格。
-    """
-    # demo 用：兩個標準製程
     templates = [
         {
             "id": 1,
@@ -509,10 +484,10 @@ def manager_process_templates():
 
 
 # =========================
-# 主程式入口
+# 入口
 # =========================
 
 if __name__ == "__main__":
-    # debug=True 方便開發時自動重啟與看到錯誤
     app.run(debug=True)
+
 
