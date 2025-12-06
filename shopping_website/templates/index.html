@@ -2,6 +2,10 @@
 
 {% block title %}首頁 - 智慧工廠下單系統{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/loader.css') }}">
+{% endblock %}
+
 {% block content %}
 
 {% if show_loader %}
@@ -79,5 +83,4 @@
     </div>
   </section>
 </div>
-
 {% endblock %}
