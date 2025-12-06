@@ -17,25 +17,34 @@ def order_page():
     - GET：顯示產品列表 + 數量輸入格
     - POST：檢查每個產品的數量，存到 session["current_order_items"]，然後導到製程規劃頁
     """
+
     # 先把產品列表抓出來（不管 GET / POST 都會用到）
     conn = get_product_db()
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT id, name, description, base_price, stock
+        SELECT
+            id,
+            name,
+            description,
+            base_price,
+            TOTAL AS stock_total    -- 資料庫欄位叫 TOTAL，這裡取一個好記的別名
         FROM products
+        ORDER BY id
         """
     )
     rows = cur.fetchall()
     conn.close()
 
+    # 把資料整理成給模板用的格式
+    # 注意：雖然 DB 欄位是 TOTAL，我們在 Python 裡統一叫做 p["stock"]
     products = [
         {
             "id": row["id"],
             "name": row["name"],
             "description": row["description"],
             "base_price": row["base_price"],
-            "stock": row["stock"],
+            "stock": row["stock_total"],  # 這裡對應到上面的別名
         }
         for row in rows
     ]
@@ -67,11 +76,13 @@ def order_page():
                 break
 
             if qty > 0:
-                selected_items.append({
-                    "id": p["id"],
-                    "name": p["name"],
-                    "quantity": qty,
-                })
+                selected_items.append(
+                    {
+                        "id": p["id"],
+                        "name": p["name"],
+                        "quantity": qty,
+                    }
+                )
 
         if not error_message:
             if not selected_items:
@@ -98,7 +109,11 @@ def process_plan():
     """
     # 標準製程（之後可從 DB 讀）
     standard_steps = [
-        {"step_order": 1, "step_name": "揀料（上蓋 / 下蓋 / 保險絲 / 電路板）", "estimated_time_sec": 5},
+        {
+            "step_order": 1,
+            "step_name": "揀料（上蓋 / 下蓋 / 保險絲 / 電路板）",
+            "estimated_time_sec": 5,
+        },
         {"step_order": 2, "step_name": "組裝", "estimated_time_sec": 10},
         {"step_order": 3, "step_name": "電性測試", "estimated_time_sec": 8},
         {"step_order": 4, "step_name": "包裝", "estimated_time_sec": 5},
@@ -118,3 +133,4 @@ def process_plan():
         standard_steps=standard_steps,
         order_items_summary=order_items_summary,
     )
+
