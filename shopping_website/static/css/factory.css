@@ -1,0 +1,89 @@
+/* ========= 工廠模擬用時間軸 ========= */
+
+.timeline {
+  margin: 1rem 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.timeline-step {
+  position: relative;
+  padding-left: 1.5rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.95rem;
+}
+
+.timeline-step::before {
+  content: "";
+  position: absolute;
+  left: 0.3rem;
+  top: 0.3rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--border-light);
+}
+
+.timeline-step::after {
+  content: "";
+  position: absolute;
+  left: 0.65rem;
+  top: 0.9rem;
+  width: 1px;
+  height: 14px;
+  background-color: var(--border-light);
+}
+
+/* 最後一個步驟不用往下延伸線 */
+.timeline-step:last-child::after {
+  display: none;
+}
+
+/* 依照狀態上色：pending / running / finished */
+.timeline-step.pending::before {
+  background-color: var(--border-light);
+}
+
+.timeline-step.running::before {
+  background-color: var(--festo-blue);
+  box-shadow: 0 0 0 4px rgba(0, 159, 227, 0.3);
+  animation: timeline-dot-pulse 1s infinite ease-in-out;
+}
+
+/* 讓整行文字也有一點呼吸亮度效果 */
+.timeline-step.running {
+  animation: timeline-row-glow 1.4s infinite ease-in-out;
+}
+
+.timeline-step.finished::before {
+  background-color: var(--success);
+}
+
+/* 動畫：進行中步驟點點跳動 + 呼吸效果 */
+
+@keyframes timeline-dot-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(0, 159, 227, 0.3);
+  }
+  50% {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 6px rgba(0, 159, 227, 0.0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(0, 159, 227, 0.3);
+  }
+}
+
+@keyframes timeline-row-glow {
+  0% {
+    color: var(--text-main);
+  }
+  50% {
+    color: var(--festo-blue-dark);
+  }
+  100% {
+    color: var(--text-main);
+  }
+}
