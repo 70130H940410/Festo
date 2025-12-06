@@ -5,84 +5,82 @@
 {% block content %}
 <h2>個人資料</h2>
 <p class="text-muted">
-  您可以在此查看與更新帳號相關資訊。之後後端可以從登入狀態載入目前使用者資料，
-  並在修改後寫回資料庫。
+  您可以在此查看與更新帳號相關資訊。帳號固定用來登入，姓名則可作為顯示用名稱。
 </p>
 
-{# 提示訊息：之後後端可以帶 success_message / error_message 進來 #}
-{% if success_message %}
-  <div class="alert alert-success">
-    {{ success_message }}
-  </div>
-{% endif %}
 {% if error_message %}
-  <div class="alert alert-error">
-    {{ error_message }}
-  </div>
+  <div class="alert alert-error">{{ error_message }}</div>
+{% endif %}
+{% if success_message %}
+  <div class="alert alert-success">{{ success_message }}</div>
 {% endif %}
 
 <div class="grid-2">
-  <!-- 左邊：基本資料 -->
-  <section class="card">
+  <!-- 左：基本資料 -->
+  <div class="card">
     <h3>基本資料</h3>
     <p class="text-muted">
       帳號名稱通常不允許修改；若有需要變更請聯絡系統管理者。
     </p>
 
-    <form method="post" action="{{ url_for('user_profile') }}">
+    <form method="post">
+      <input type="hidden" name="action" value="update_profile">
+
       <label>
         帳號（Username）
-        <input type="text" name="username" value="{{ user.username if user else '' }}" readonly>
+        <input type="text" value="{{ user.username }}" disabled>
       </label>
 
       <label>
         姓名
-        <input type="text" name="full_name" value="{{ user.full_name if user else '' }}">
+        <input type="text" name="full_name" value="{{ user.full_name }}">
       </label>
 
       <label>
         Email
-        <input type="email" name="email" value="{{ user.email if user else '' }}">
+        <input type="email" name="email" value="{{ user.email }}">
       </label>
 
       <label>
         身分
-        <input type="text" value="{% if user and user.role == 'manager' %}工廠管理者{% else %}一般使用者{% endif %}" readonly>
+        <input type="text" value="{% if user.role == 'manager' %}工廠管理者{% else %}一般使用者{% endif %}" disabled>
       </label>
 
       <div class="mt-2 text-right">
-        <button type="submit" name="action" value="update_profile">儲存基本資料</button>
+        <button type="submit">儲存基本資料</button>
       </div>
     </form>
-  </section>
+  </div>
 
-  <!-- 右邊：變更密碼 -->
-  <section class="card">
+  <!-- 右：變更密碼 -->
+  <div class="card">
     <h3>變更密碼</h3>
     <p class="text-muted">
       建議定期更換密碼，並避免與其他系統共用相同密碼。
     </p>
 
-    <form method="post" action="{{ url_for('user_profile') }}">
+    <form method="post">
+      <input type="hidden" name="action" value="change_password">
+
       <label>
         目前密碼
-        <input type="password" name="current_password" required>
+        <input type="password" name="current_password">
       </label>
 
       <label>
         新密碼
-        <input type="password" name="new_password" required>
+        <input type="password" name="new_password">
       </label>
 
       <label>
         再次輸入新密碼
-        <input type="password" name="new_password_confirm" required>
+        <input type="password" name="new_password_confirm">
       </label>
 
       <div class="mt-2 text-right">
-        <button type="submit" name="action" value="change_password">更新密碼</button>
+        <button type="submit">更新密碼</button>
       </div>
     </form>
-  </section>
+  </div>
 </div>
 {% endblock %}

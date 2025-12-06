@@ -102,7 +102,7 @@ def login():
             # 用 account 欄位當登入帳號
             cur.execute(
                 """
-                SELECT id, account, password_hash, role
+                SELECT id, account, password_hash, role, full_name
                 FROM User_profile
                 WHERE account = ?
                 """,
@@ -114,6 +114,7 @@ def login():
             if row and check_password_hash(row["password_hash"], password):
                 session["user_id"] = row["id"]
                 session["username"] = row["account"]
+                session["full_name"] = row["full_name"]
                 session["role"] = row["role"]
 
                 # 依角色導向
@@ -147,6 +148,7 @@ def register_customer():
     寫入 User_profile：
     - id: uuid4 字串
     - account: 使用者帳號
+    - full_name: 中文姓名
     - email
     - password_hash
     - role: 'customer'
@@ -158,7 +160,7 @@ def register_customer():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         email = request.form.get("email", "").strip()
-        full_name = request.form.get("full_name", "").strip()  # 目前不存 DB
+        full_name = request.form.get("full_name", "").strip()
 
         if not username or not password:
             error_message = "帳號與密碼為必填。"
@@ -182,10 +184,10 @@ def register_customer():
                 cur.execute(
                     """
                     INSERT INTO User_profile
-                        (id, account, email, password_hash, role, registration_key)
-                    VALUES (?, ?, ?, ?, 'customer', NULL)
+                        (id, account, full_name, email, password_hash, role, registration_key)
+                    VALUES (?, ?, ?, ?, ?, 'customer', NULL)
                     """,
-                    (user_id, username, email, password_hash),
+                    (user_id, username, full_name, email, password_hash),
                 )
                 conn.commit()
                 conn.close()
@@ -218,7 +220,7 @@ def register_manager():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         email = request.form.get("email", "").strip()
-        full_name = request.form.get("full_name", "").strip()  # 目前不存 DB
+        full_name = request.form.get("full_name", "").strip()
         factory_key = request.form.get("factory_key", "").strip()
 
         if not username or not password or not factory_key:
@@ -258,10 +260,10 @@ def register_manager():
                     cur.execute(
                         """
                         INSERT INTO User_profile
-                            (id, account, email, password_hash, role, registration_key)
-                        VALUES (?, ?, ?, ?, 'manager', ?)
+                            (id, account, full_name, email, password_hash, role, registration_key)
+                        VALUES (?, ?, ?, ?, ?, 'manager', ?)
                         """,
-                        (user_id, username, email, password_hash, factory_key),
+                        (user_id, username, full_name, email, password_hash, factory_key),
                     )
                     conn.commit()
                     conn.close()
@@ -283,10 +285,9 @@ def register_manager():
 def user_profile():
     """
     用 id 找 User_profile：
-    - account 當 username 顯示
-    - email 可修改
+    - account 當 username 顯示（不可改）
+    - full_name / email 可修改
     - 密碼可修改
-    - full_name 目前沒有存 DB，先給空字串
     """
     user_id = session.get("user_id")
 
@@ -295,7 +296,7 @@ def user_profile():
 
     cur.execute(
         """
-        SELECT id, account, email, role
+        SELECT id, account, full_name, email, role
         FROM User_profile
         WHERE id = ?
         """,
@@ -315,17 +316,37 @@ def user_profile():
         action = request.form.get("action")
 
         if action == "update_profile":
+            full_name = request.form.get("full_name", "").strip()
             email = request.form.get("email", "").strip()
-            cur.execute(
-                """
-                UPDATE User_profile
-                SET email = ?
-                WHERE id = ?
-                """,
-                (email, user_id),
-            )
-            conn.commit()
-            success_message = "基本資料已更新。"
+
+            # 1. 檢查這個 Email 有沒有被「其他帳號」使用
+            if email:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM User_profile
+                    WHERE email = ? AND id != ?
+                    """,
+                    (email, user_id),
+                )
+                exists_email = cur.fetchone()
+            else:
+                exists_email = None
+
+            if exists_email:
+                error_message = "此 Email 已被其他帳號使用，請改用另一個 Email。"
+            else:
+                # 2. 安全地更新自己的 full_name 與 email
+                cur.execute(
+                    """
+                    UPDATE User_profile
+                    SET full_name = ?, email = ?
+                    WHERE id = ?
+                    """,
+                    (full_name, email, user_id),
+                )
+                conn.commit()
+                success_message = "基本資料已更新。"
 
         elif action == "change_password":
             current_password = request.form.get("current_password", "")
@@ -362,7 +383,7 @@ def user_profile():
     # 重新讀一次最新資料
     cur.execute(
         """
-        SELECT id, account, email, role
+        SELECT id, account, full_name, email, role
         FROM User_profile
         WHERE id = ?
         """,
@@ -374,10 +395,13 @@ def user_profile():
     user = {
         "id": row["id"],
         "username": row["account"],
+        "full_name": row["full_name"] or "",
         "email": row["email"],
-        "full_name": "",  # 目前未存
         "role": row["role"],
     }
+
+    # session 裡順便更新一下 full_name，之後 navbar 如果要秀名字比較好用
+    session["full_name"] = user["full_name"]
 
     return render_template(
         "user/profile.html",
@@ -511,7 +535,7 @@ def factory_simulate():
     """
     order_info = {
         "id": 1,
-        "user_name": session.get("username", "Demo User"),
+        "user_name": session.get("full_name") or session.get("username", "Demo User"),
         "status": "in_progress",
     }
 
@@ -563,11 +587,11 @@ def manager_process_templates():
         },
         {
             "id": 2,
-            "name": "高強度測試流程",
+            "name": "高溫壽命測試流程",
             "steps": [
                 "揀料",
                 "組裝",
-                "高温燒機測試",
+                "高溫燒機測試",
                 "電性測試",
                 "包裝",
             ],
@@ -586,5 +610,4 @@ def manager_process_templates():
 
 if __name__ == "__main__":
     app.run(debug=True)
-
 
