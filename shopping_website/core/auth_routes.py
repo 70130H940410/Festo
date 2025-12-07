@@ -33,8 +33,8 @@ def login():
     if request.method == "POST":
         # 允許使用「帳號或 Email」任何一個來登入
         identifier = (
-            request.form.get("identifier", "").strip()
-            or request.form.get("account", "").strip()
+            request.form.get("user_login", "").strip()
+            or request.form.get("user_login", "").strip()
         )
         password = request.form.get("password", "")
 
@@ -63,7 +63,7 @@ def login():
                 if not check_password_hash(user["password_hash"], password):
                     error_message = "密碼錯誤，請再試一次。"
                 else:
-                    # ✅ 登入成功
+                    # 登入成功
                     session.clear()
                     session["user_id"] = user["id"]
                     session["account"] = user["account"]
@@ -142,7 +142,7 @@ def profile():
         full_name=user["full_name"],
         email=user["email"],
         role=user["role"],
-        registration=user["registration"],
+        registration=user["registration_key"],
     )
 
 
@@ -163,7 +163,7 @@ def register_customer():
         full_name = request.form.get("full_name", "").strip() or None
 
         if not account or not email or not password :
-            error_message = "請完整填寫帳號、密碼 與Email。"
+            error_message = "請完整填寫帳號、密碼與Email。"
         #elif password != password2:
             #error_message = "兩次輸入的密碼不一致。"
         else:
@@ -187,7 +187,7 @@ def register_customer():
                 cur.execute(
                     """
                     INSERT INTO User_profile
-                    (id, account, email, password_hash, role, registration, full_name)
+                    (id, account, email, password_hash, role, registration_key, full_name)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
@@ -271,7 +271,7 @@ def register_manager():
                     cur.execute(
                         """
                         INSERT INTO User_profile
-                        (id, account, email, password_hash, role, registration, full_name)
+                        (id, account, email, password_hash, role, registration_key, full_name)
                         VALUES (?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
