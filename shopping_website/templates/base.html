@@ -6,9 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- 主樣式 -->
-  <link rel="stylesheet" href="../static/css/base.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
   <!-- Loader 樣式 -->
-  <link rel="stylesheet" href="../static/css/loader.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/loader.css') }}">
 </head>
 <body data-page="{{ request.endpoint or '' }}">
   <!-- 首次進入首頁用 Loader -->
@@ -33,19 +33,19 @@
   <header>
     <nav>
       <!-- 左側導覽 -->
-      <a href="index.html">首頁</a>
-      <a href="./order/order_page.html">我要下單</a>
-      <a href="./user/profile.html">個人資料</a>
-      <a href="./manager/inventory.html">庫存管理</a>
-      <a href="./manager/process_templates.html">製程模板管理</a>
+      <a href="{{ url_for('index') }}">首頁</a>
+      <a href="{{ url_for('order.order_page') }}">我要下單</a>
+      <a href="{{ url_for('auth.profile') }}">個人資料</a>
+      <a href="{{ url_for('manager.manager_inventory') }}">庫存管理</a>
+      <a href="{{ url_for('manager.manager_process_templates') }}">製程模板管理</a>
 
       <!-- 右側登入 / 登出 -->
       <span style="margin-left:auto; display:flex; gap:0.75rem; align-items:center;">
         {% if session.get('user_id') %}
           <span class="nav-user">👤 {{ session.get('account') }}</span>
-          <a href="./auth/login.html">登出</a>
+          <a href="{{ url_for('auth.logout') }}">登出</a>
         {% else %}
-          <a href="./auth/login.html">登入</a>
+          <a href="{{ url_for('auth.login') }}">登入</a>
         {% endif %}
       </span>
     </nav>
@@ -60,7 +60,7 @@
   </footer>
 
   <!-- 首頁 Loader JS -->
-  <script src="../static/js/loader.js"></script>
+  <script src="{{ url_for('static', filename='js/loader.js') }}"></script>
 </body>
 </html>
 

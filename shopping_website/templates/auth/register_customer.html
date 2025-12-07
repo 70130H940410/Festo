@@ -37,7 +37,7 @@
 
   <div class="mt-2">
     <button type="submit">建立帳號</button>
-    <a class="btn btn-secondary" href="login.html">返回登入</a>
+    <a class="btn btn-secondary" href="{{ url_for('auth.login') }}">返回登入</a>
   </div>
 </form>
 
@@ -46,7 +46,7 @@
   <p class="text-muted">
     若需管理庫存與製程模板，請改用工廠管理者註冊，並輸入工廠負責人金鑰。
   </p>
-  <a class="btn" href="register_manager.html">前往管理者註冊</a>
+  <a class="btn" href="{{ url_for('auth.register_manager') }}">前往管理者註冊</a>
 </div>
 {% endblock %}
 

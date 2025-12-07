@@ -41,7 +41,7 @@
     <p class="text-muted">
       若你是需要遠端下單的客戶，請建立一般使用者帳號。
     </p>
-    <a class="btn" href="register_customer.html">註冊一般使用者</a>
+    <a class="btn" href="{{ url_for('auth.register_customer') }}">註冊一般使用者</a>
   </div>
 
   <div class="card">
@@ -49,7 +49,7 @@
     <p class="text-muted">
       若需管理庫存與標準製程模板，請使用工廠管理者註冊，並輸入工廠負責人金鑰。
     </p>
-    <a class="btn btn-secondary" href="register_manager.html">工廠管理者註冊</a>
+    <a class="btn btn-secondary" href="{{ url_for('auth.register_manager') }}">工廠管理者註冊</a>
   </div>
 </div>
 {% endblock %}
