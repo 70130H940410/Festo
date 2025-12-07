@@ -136,7 +136,7 @@ def profile():
 
     # 兩種方式都提供，避免 template 名稱對不起來
     return render_template(
-        "auth/profile.html",
+        "user/profile.html",
         user=user,
         account=user["account"],
         full_name=user["full_name"],
