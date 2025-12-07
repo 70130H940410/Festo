@@ -17,7 +17,7 @@
 <form method="post">
   <label>
     帳號
-    <input type="text" name="username" required>
+    <input type="text" name="account" required>
   </label>
 
   <label>
@@ -42,7 +42,7 @@
 
   <div class="mt-2">
     <button type="submit">建立管理者帳號</button>
-    <a class="btn btn-secondary" href="login.html">返回登入</a>
+    <a class="btn btn-secondary" href="{{ url_for('auth.login') }}">返回登入</a>
   </div>
 </form>
 
@@ -51,7 +51,7 @@
   <p class="text-muted">
     如果只需要遠端下單與查看產線模擬，請使用一般使用者帳號即可。
   </p>
-  <a class="btn" href="register_customer.html">前往一般使用者註冊</a>
+  <a class="btn" href="{{ url_for('auth.register_customer') }}">前往一般使用者註冊</a>
 </div>
 {% endblock %}
 
