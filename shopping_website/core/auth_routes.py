@@ -163,7 +163,7 @@ def register_customer():
         full_name = request.form.get("full_name", "").strip() or None
 
         if not account or not email or not password :
-            error_message = "請完整填寫帳號、Email 與密碼。"
+            error_message = "請完整填寫帳號、密碼 與Email。"
         #elif password != password2:
             #error_message = "兩次輸入的密碼不一致。"
         else:
