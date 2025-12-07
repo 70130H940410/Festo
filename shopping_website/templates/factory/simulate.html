@@ -3,7 +3,7 @@
 {% block title %}工廠運作模擬 - 智慧工廠下單系統{% endblock %}
 
 {% block content %}
-<h2>工廠運作模擬（Demo）</h2>
+<h2>工廠運作模擬 (Demo)</h2>
 <p class="text-muted">
   這個頁面示意 MES / 產線實際運作時的流程進度。之後可以改成由 PLC / MES 回寫每個步驟狀態，
   前端只要定期讀取資料庫並更新畫面即可。
@@ -51,7 +51,7 @@
   <ul class="timeline" id="timeline">
     {% for s in steps %}
     <li class="timeline-step {{ s.status }}">
-      <strong>Step {{ s.step_order }}：</strong> {{ s.step_name }}
+      <strong>Step {{ s.step_order }}:</strong> {{ s.step_name }}
       {% if s.status == "finished" %}
         <span class="text-muted">（已完成）</span>
       {% elif s.status == "running" %}
@@ -76,7 +76,7 @@
   </ul>
 
   <div class="mt-2 text-right">
-    <a class="btn btn-secondary" href="{{ url_for('order.order_page') }}">
+    <a class="btn btn-secondary" href="../order/order_page.html">
       返回重新下單
     </a>
   </div>
