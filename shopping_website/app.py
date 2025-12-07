@@ -54,9 +54,11 @@ if __name__ == "__main__":
     # 開發階段開 debug 比較好除錯，之後部署再關掉
     app.run(debug=True)
 
+from core.auth_routes import auth_bp
+
 @auth_bp.route("/debug_db")
 def debug_db():
-  from .db import get_user_db
+  from core.db import get_user_db
 
   conn = get_user_db()
   cur = conn.cursor()

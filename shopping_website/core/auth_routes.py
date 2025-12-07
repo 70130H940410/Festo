@@ -25,8 +25,8 @@ auth_bp = Blueprint("auth", __name__)
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     """
-    - GET：顯示登入頁
-    - POST：用「帳號或 Email」+ 密碼登入
+    - GET:顯示登入頁
+    - POST:用「帳號或 Email」+ 密碼登入
     """
     error_message = None
 
@@ -39,7 +39,7 @@ def login():
         password = request.form.get("password", "")
 
         if not identifier or not password:
-            error_message = "請輸入帳號（或 Email）與密碼。"
+            error_message = "請輸入帳號（或 Email)與密碼。"
         else:
             conn = get_user_db()
             cur = conn.cursor()
@@ -89,8 +89,8 @@ def logout():
 @login_required
 def profile():
     """
-    - GET：顯示目前登入使用者的基本資料
-    - POST：目前只更新 full_name（姓名）
+    - GET:顯示目前登入使用者的基本資料
+    - POST:目前只更新 full_name(姓名)
     """
     user_id = session.get("user_id")
     if not user_id:
@@ -159,13 +159,13 @@ def register_customer():
         account = request.form.get("account", "").strip()
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
-        password2 = request.form.get("password2", "")
+        #password2 = request.form.get("password2", "")
         full_name = request.form.get("full_name", "").strip() or None
 
-        if not account or not email or not password or not password2:
-            error_message = "請完整填寫帳號、Email 與密碼。"
-        elif password != password2:
-            error_message = "兩次輸入的密碼不一致。"
+        if not account or not email or not password :
+            error_message = "請完整填寫帳號、密碼 與Email。"
+        #elif password != password2:
+            #error_message = "兩次輸入的密碼不一致。"
         else:
             conn = get_user_db()
             cur = conn.cursor()
@@ -229,14 +229,14 @@ def register_manager():
         account = request.form.get("account", "").strip()
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
-        password2 = request.form.get("password2", "")
+        #password2 = request.form.get("password2", "")
         full_name = request.form.get("full_name", "").strip() or None
         factory_key = request.form.get("factory_key", "").strip()
 
-        if not account or not email or not password or not password2 or not factory_key:
-            error_message = "請完整填寫帳號、Email、密碼與工廠負責人金鑰。"
-        elif password != password2:
-            error_message = "兩次輸入的密碼不一致。"
+        if not account or not email or not password or not factory_key:
+            error_message = "請完整填寫帳號、密碼、Email與工廠負責人金鑰。"
+        #elif password != password2:
+            #error_message = "兩次輸入的密碼不一致。"
         else:
             conn = get_user_db()
             cur = conn.cursor()
