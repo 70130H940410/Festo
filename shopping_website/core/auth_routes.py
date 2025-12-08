@@ -69,8 +69,8 @@ def login():
                     session["account"] = user["account"]
                     session["role"] = user["role"]
 
-                    # 登入後先回首頁（你也可以改成 order.order_page 等）
-                    return redirect(url_for("auth.login"))
+                    # 登入後先回
+                    return redirect(url_for("order.order_page"))
 
     return render_template("auth/login.html", error_message=error_message)
 
