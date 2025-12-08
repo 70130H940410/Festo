@@ -70,7 +70,7 @@ def login():
                     session["role"] = user["role"]
 
                     # 登入後先回首頁（你也可以改成 order.order_page 等）
-                    return redirect(url_for("index"))
+                    return redirect(url_for("auth.login"))
 
     return render_template("auth/login.html", error_message=error_message)
 
