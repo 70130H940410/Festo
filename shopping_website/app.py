@@ -66,6 +66,6 @@ if __name__ == "__main__":
   #rows = cur.fetchall()
   #conn.close()
 
-  # 直接用最簡單的方式回傳看看
+  # 直接用最簡單的方式回傳看看 
   #lines = [f"{row['id']} - {row['account']}" for row in rows]
   #return "<br>".join(lines) or "no rows"

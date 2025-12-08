@@ -5,7 +5,7 @@
 {% block content %}
 <h2>製程規劃</h2>
 <p class="text-muted">
-  以下是本次訂單的產品摘要與預設的標準製程流程。之後可以再擴充為可拖曳、客製每個步驟。
+  以下是本次訂單的產品摘要與 Festo 智慧工廠中保險絲盒的標準 9 大製程流程。之後可以再擴充為可拖曳、客製每個步驟。
 </p>
 
 <!-- 訂單摘要 -->
@@ -35,19 +35,21 @@
   {% endif %}
 </div>
 
-<!-- 標準製程流程（目前以示意資料呈現） -->
+<!-- 標準製程流程（9 大站點） -->
 <div class="card">
-  <h3>標準製程流程（示意）</h3>
+  <h3>標準製程流程（Festo 智慧工廠 9 大站點）</h3>
   <p class="text-muted">
-    目前先以固定流程顯示，未來可以讓管理者在「製程模板管理」頁面調整步驟與預估時間。
+    目前先以固定流程顯示，未來可以讓管理者在「製程模板管理」頁面調整步驟、站點與預估時間。
   </p>
 
   <table>
     <thead>
       <tr>
-        <th style="width: 80px;">順序</th>
-        <th>步驟名稱</th>
-        <th class="text-right" style="width: 140px;">預估時間（秒）</th>
+        <th style="width: 60px;">順序</th>
+        <th style="width: 220px;">步驟名稱</th>
+        <th style="width: 260px;">站點</th>
+        <th>說明</th>
+        <th class="text-right" style="width: 120px;">預估時間（秒）</th>
       </tr>
     </thead>
     <tbody>
@@ -55,6 +57,8 @@
       <tr>
         <td>{{ step.step_order }}</td>
         <td>{{ step.step_name }}</td>
+        <td>{{ step.station }}</td>
+        <td>{{ step.description }}</td>
         <td class="text-right">{{ step.estimated_time_sec }}</td>
       </tr>
       {% endfor %}
@@ -89,6 +93,7 @@
   {# 之後如果要做拖曳排序 / 客製流程，可以在這裡引入 process_plan.js #}
   {# <script src="{{ url_for('static', filename='js/process_plan.js') }}"></script> #}
 {% endblock %}
+
 
 
 
