@@ -6,22 +6,26 @@ document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll(".order-qty-input")
   );
   const summaryText = document.getElementById("order-summary-text");
+  const totalPriceDisplay = document.getElementById("total-price-display");
 
   if (!form || qtyInputs.length === 0) {
     return;
   }
 
-  // 更新「本次下單摘要」的顯示文字
+  // 更新「本次下單摘要」與「總金額」的顯示文字
   function updateSummary() {
     let totalQty = 0;
+    let totalPrice = 0;
     const pickedItems = [];
 
     qtyInputs.forEach((input) => {
       const raw = input.value.trim();
       const qty = raw === "" ? 0 : parseInt(raw, 10) || 0;
+      const price = parseFloat(input.dataset.basePrice) || 0;
 
       if (qty > 0) {
         totalQty += qty;
+        totalPrice += qty * price;
         const name = input.dataset.productName || "產品";
         pickedItems.push(`${name} x ${qty}`);
       }
@@ -29,10 +33,19 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (totalQty === 0) {
       summaryText.textContent = "目前尚未選擇任何產品。";
+      if (totalPriceDisplay) {
+        totalPriceDisplay.style.display = "none";
+        totalPriceDisplay.textContent = "總金額：$0";
+      }
     } else {
       summaryText.textContent =
         `已選擇 ${pickedItems.length} 種產品，共 ${totalQty} 件：` +
         pickedItems.join("、");
+
+      if (totalPriceDisplay) {
+        totalPriceDisplay.style.display = "block";
+        totalPriceDisplay.textContent = `總金額：$${totalPrice.toLocaleString()}`; // 加千分位逗號
+      }
     }
   }
 

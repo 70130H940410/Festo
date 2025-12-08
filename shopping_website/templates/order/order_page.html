@@ -51,6 +51,7 @@
             max="{{ p.stock }}"
             value="0"
             style="width: 80px;"
+            data-base-price="{{ p.base_price }}"
           >
         </td>
       </tr>
@@ -63,6 +64,9 @@
     <p id="order-summary-text" class="text-muted">
       目前尚未選擇任何產品。
     </p>
+    <h2 id="total-price-display" style="color: #2c3e50; margin-top: 10px; display:none;">
+      總金額：$0
+    </h2>
   </div>
 
   <div class="text-right mt-2">
