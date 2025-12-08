@@ -14,8 +14,8 @@ order_bp = Blueprint("order", __name__)
 def order_page():
     """
     下單頁：
-    - GET：顯示產品列表 + 數量輸入格
-    - POST：檢查每個產品的數量，存到 session["current_order_items"]，然後導到製程規劃頁
+    - GET:顯示產品列表 + 數量輸入格
+    - POST:檢查每個產品的數量，存到 session["current_order_items"]，然後導到製程規劃頁
     """
 
     # 先把產品列表抓出來（不管 GET / POST 都會用到）
