@@ -111,18 +111,70 @@ def process_plan():
     standard_steps = [
         {
             "step_order": 1,
-            "step_name": "揀料（上蓋 / 下蓋 / 保險絲 / 電路板）",
+            "step_name": "訂單與供料 (Order & Dispensing)",
+            "station": "ASRS 自動倉儲站 (Stopper 1 / A1)",
+            "description": "由外部訂單觸發，ASRS 從貨架取出載有上蓋的托盤並送上輸送帶，流程開始。",
             "estimated_time_sec": 5,
         },
-        {"step_order": 2, "step_name": "組裝", "estimated_time_sec": 10},
-        {"step_order": 3, "step_name": "電性測試", "estimated_time_sec": 8},
-        {"step_order": 4, "step_name": "包裝", "estimated_time_sec": 5},
+        {
+            "step_order": 2,
+            "step_name": "尺寸量測 (Measuring)",
+            "station": "量測工作站 (Measuring Module / B)",
+            "description": "使用雷射距離感測器對上蓋進行類比差分量測，確認尺寸是否符合規格。",
+            "estimated_time_sec": 5,
+        },
+        {
+            "step_order": 3,
+            "step_name": "鑽孔加工 (Drilling)",
+            "station": "鑽孔工作站 (Drilling CPS / C)",
+            "description": "雙鑽軸模擬 X / Z 軸移動，於上蓋鑽出兩對孔位。",
+            "estimated_time_sec": 8,
+        },
+        {
+            "step_order": 4,
+            "step_name": "機器人組裝 (Robot Assembly)",
+            "station": "機器人組裝室 (Robot Assembly / D)",
+            "description": "Mitsubishi 六軸機器人將 PCB 安裝至上蓋，並將保險絲插入電路板。",
+            "estimated_time_sec": 10,
+        },
+        {
+            "step_order": 5,
+            "step_name": "視覺檢測 (Camera Inspection)",
+            "station": "視覺檢測工作站 (Camera Inspection / E)",
+            "description": "工業相機檢查保險絲是否安裝、位置是否正確，並判定良品 / 不良品。",
+            "estimated_time_sec": 6,
+        },
+        {
+            "step_order": 6,
+            "step_name": "放置下蓋 (Place Lower Cover)",
+            "station": "盒匣 / 堆疊工作站 (Stacking Magazine / F)",
+            "description": "從堆疊模組分離下蓋，放置到托盤上的工件，準備與上蓋結合。",
+            "estimated_time_sec": 5,
+        },
+        {
+            "step_order": 7,
+            "step_name": "氣壓壓合 (Pressing)",
+            "station": "氣壓壓製工作站 (Muscle Press / G)",
+            "description": "利用氣壓肌腱 (Fluidic Muscle) 將上蓋與下蓋緊密壓合，完成外殼組裝。",
+            "estimated_time_sec": 6,
+        },
+        {
+            "step_order": 8,
+            "step_name": "烘烤加熱 (Heating)",
+            "station": "烘烤加熱工作站 (Heating Oven / H)",
+            "description": "隧道式烤箱模擬膠合固化 / 熱處理，產品在受控溫度曲線下進行加熱。",
+            "estimated_time_sec": 12,
+        },
+        {
+            "step_order": 9,
+            "step_name": "成品入庫 (Storage)",
+            "station": "ASRS 自動倉儲站 (Stopper 2 / A2)",
+            "description": "完成工序的成品返回 ASRS，由倉儲機器人放回指定貨位，完成生產循環。",
+            "estimated_time_sec": 5,
+        },
     ]
 
-    # 從 session 取得剛剛在 /order 選的產品
     order_items_summary = session.get("current_order_items")
-
-    # 如果沒有（例如直接打網址進來），就給一組 demo 避免報錯
     if not order_items_summary:
         order_items_summary = [
             {"name": "Basic Fuse Box - Black", "quantity": 3},
