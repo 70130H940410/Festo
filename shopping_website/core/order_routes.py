@@ -28,7 +28,7 @@ def order_page():
             name,
             description,
             base_price,
-            TOTAL AS stock_total    -- 資料庫欄位叫 TOTAL，這裡取一個好記的別名
+            stock
         FROM products
         ORDER BY id
         """
@@ -44,7 +44,7 @@ def order_page():
             "name": row["name"],
             "description": row["description"],
             "base_price": row["base_price"],
-            "stock": row["stock_total"],  # 這裡對應到上面的別名
+            "stock": row["stock"],
         }
         for row in rows
     ]
@@ -107,7 +107,7 @@ def process_plan():
     - 從 session["current_order_items"] 讀取本次訂單摘要
     - 若 session 沒東西，退回 demo 資料（避免直接輸入網址爆掉）
     """
-    # 標準製程（之後可從 DB 讀）
+    # 標準製程（之後可從 DB 讀)
     standard_steps = [
         {
             "step_order": 1,
