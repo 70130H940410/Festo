@@ -311,4 +311,252 @@ tr:hover td {
 
 .text-right { text-align: right; }
 .text-center { text-align: center; }
+/* ========= Badge 標籤（狀態顯示） ========= */
 
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.badge-success {
+  background-color: rgba(34, 160, 83, 0.12);
+  color: var(--success);
+}
+
+.badge-primary {
+  background-color: rgba(0, 159, 227, 0.12);
+  color: var(--festo-blue-dark);
+}
+
+.badge-secondary {
+  background-color: #e5e7eb;
+  color: var(--text-main);
+}
+
+.badge-info {
+  background-color: rgba(0, 159, 227, 0.08);
+  color: var(--festo-blue-dark);
+}
+
+/* ========= Timeline（右邊步驟條） ========= */
+
+.timeline {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  border-left: 2px solid var(--border-light);
+}
+
+.timeline-item {
+  position: relative;
+  padding-left: 1.4rem;
+  margin-bottom: 0.9rem;
+}
+
+.timeline-status {
+  position: absolute;
+  left: -7px;
+  top: 6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+.status-finished { background-color: var(--success); }
+.status-running  { background-color: var(--festo-blue); }
+.status-pending  { background-color: #cbd5e1; }
+
+.timeline-content {
+  background-color: #ffffff;
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+}
+
+.timeline-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.timeline-header strong {
+  font-size: 0.95rem;
+}
+
+.timeline-sub {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+/* ========= Festo CP-Factory 平面配置 + 搬運動畫 ========= */
+
+/* ========== 產線搬運路徑動畫 ========== */
+
+.production-line {
+  position: relative;
+  margin-top: 0.75rem;
+  width: 720px;
+  max-width: 100%;
+  height: 260px;
+  background: #f9fafb;
+  border-radius: 12px;
+  border: 1px solid var(--border-light);
+  overflow: hidden;
+}
+
+/* 輸送帶：主線 U 型（只連 A1/A2、D、E、F、G），
+   B / C / H 別線，不接輸送帶，由移動式機器人搬運。 */
+.belt {
+  position: absolute;
+  background: rgba(255, 153, 0, 0.3);
+  border-radius: 999px;
+}
+
+/* 上方主線（F → E → D 方向） */
+.belt-main {
+  top: 40px;
+  left: 160px;
+  width: 360px;
+  height: 24px;
+}
+
+/* 左側垂直段（F → G） */
+.belt-vertical {
+  top: 40px;
+  left: 160px;
+  width: 24px;
+  height: 140px;
+}
+
+/* 下方迴流線（G → A1/A2） */
+.belt-left {
+  top: 160px;
+  left: 160px;
+  width: 360px;
+  height: 24px;
+}
+
+/* 站點方塊 */
+
+.station {
+  position: absolute;
+  width: 90px;
+  min-height: 56px;
+  background: var(--festo-blue);
+  color: #fff;
+  border-radius: 8px;
+  padding: 0.25rem 0.4rem;
+  box-sizing: border-box;
+  font-size: 0.8rem;
+  text-align: center;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.18);
+}
+
+.station span {
+  display: block;
+  font-size: 0.7rem;
+  opacity: 0.9;
+  line-height: 1.2;
+}
+
+/* 相對位置架構：
+   - A1 / A2：同一個倉儲，放在中央同一位置
+   - B / C / H：右側獨立直線，由移動式機器人搬運
+   - D：右上角轉角
+   - E / A2 / F：上方主線
+   - G：左側端點
+   - 下方迴流線：G → A1/A2
+   - R：中央游離區的移動機器人
+*/
+
+/* A1 / A2 同位置（中央倉儲） */
+.station-a1 { top: 110px; left: 320px; }
+.station-a2 { top: 110px; left: 320px; }
+
+/* 主線上方：D（右上）、E（中偏右）、F（中偏左） */
+.station-d  { top: 40px;  left: 440px; }  /* 右上角 D 機器人室 */
+.station-e  { top: 40px;  left: 350px; }  /* 上方主線 E 視覺檢測 */
+.station-f  { top: 40px;  left: 230px; }  /* 上方主線 F 盒匣 */
+
+/* 左側端點 G（氣壓壓製） */
+.station-g  { top: 120px; left: 140px; }
+
+/* 右側獨立支線：B / C / H 一條直線，由移動式機器人搬運 */
+.station-b  { top: 40px;  left: 600px; }  /* B 量測（上方） */
+.station-c  { top: 120px; left: 600px; }  /* C 鑽孔（中間） */
+.station-h  { top: 200px; left: 600px; }  /* H 烘烤加熱（下方） */
+
+/* R：游離區中的移動機器人 Robotino */
+.station-r  { top: 120px; left: 430px; }
+
+/* 搬運載具：這裡用小方塊代表「移動式機器人」在 A1 ↔ B/C/H 間搬運 */
+
+.carrier {
+  position: absolute;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: carrier-move 16s linear infinite;
+}
+
+.carrier-inner {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--festo-blue);
+}
+
+/* 圖例 */
+
+.line-legend {
+  font-size: 0.82rem;
+  margin-bottom: 0.35rem;
+}
+
+.legend-box {
+  display: inline-block;
+  width: 14px;
+  height: 10px;
+  border-radius: 999px;
+  margin-right: 0.25rem;
+  vertical-align: middle;
+}
+
+.legend-belt    { background: rgba(255, 153, 0, 0.5); }
+.legend-station { background: var(--festo-blue); }
+.legend-carrier {
+  background: #ffffff;
+  border: 2px solid var(--festo-blue);
+}
+
+/* 移動式機器人搬運路徑：
+   這裡的動畫示意 Robotino 在
+   A1/A2 → B → C → H → 回到 A1/A2 的循環。
+*/
+
+@keyframes carrier-move {
+  /* 起點：A1/A2（中央倉儲） */
+  0%   { transform: translate(330px, 120px); }
+
+  /* A1/A2 → B（右上） */
+  20%  { transform: translate(610px, 50px); }
+
+  /* B → C（往下） */
+  50%  { transform: translate(610px, 130px); }
+
+  /* C → H（再往下） */
+  80%  { transform: translate(610px, 210px); }
+
+  /* H → A1/A2（回到中央） */
+  100% { transform: translate(330px, 120px); }
+}

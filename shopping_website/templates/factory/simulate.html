@@ -1,14 +1,16 @@
 {% extends "base.html" %}
 
-{% block title %}工廠運作模擬 - 智慧工廠下單系統{% endblock %}
+{% block title %}工廠運作模擬 (Demo) - 智慧工廠下單系統{% endblock %}
 
 {% block content %}
 <h2>工廠運作模擬 (Demo)</h2>
 <p class="text-muted">
-  這個頁面示意 MES / 產線實際運作時的流程進度。之後可以改成由 PLC / MES 回寫每個步驟狀態，
-  前端只要定期讀取資料庫並更新畫面即可。
+  這個頁面示意國立中央大學 Festo 智慧工廠（CP-Factory）中，托盤沿著各站點
+  A1 → B → C → D → E → F → G → H → A2 的標準生產流程。未來可以改成由 PLC / MES
+  回寫每個步驟狀態與當前站點，前端只要定期讀取資料庫或使用 WebSocket 即可更新畫面。
 </p>
 
+<!-- 訂單資訊 -->
 <div class="card">
   <h3>訂單資訊</h3>
   <p class="text-muted">
@@ -19,73 +21,229 @@
     <tbody>
       <tr>
         <th style="width: 140px;">訂單編號</th>
-        <td>#{{ order_info.id }}</td>
+        <td>#1</td>
       </tr>
       <tr>
         <th>下單人</th>
-        <td>{{ order_info.user_name }}</td>
+        <td>Demo User</td>
       </tr>
       <tr>
         <th>目前狀態</th>
         <td>
-          {% if order_info.status == "in_progress" %}
-            <span class="text-muted">產線進行中…</span>
-          {% elif order_info.status == "done" %}
-            <span class="text-muted">已完成</span>
-          {% else %}
-            <span class="text-muted">{{ order_info.status }}</span>
-          {% endif %}
+          <span class="badge badge-info">產線進行中…</span>
         </td>
       </tr>
     </tbody>
   </table>
 </div>
 
+<!-- 製程步驟進度（對應 9 大站點） -->
 <div class="card">
   <h3>製程步驟進度</h3>
   <p class="text-muted">
-    綠色代表已完成、藍色代表進行中、灰色代表尚未開始。之後可以由 MES 寫回每個步驟的狀態欄位，
-    例如 <code>pending / running / finished</code>。
+    綠色代表已完成、藍色代表目前進行中、灰色代表尚未開始。流程依照
+    A1 → B → C → D → E → F → G → H → A2 的順序進行。
   </p>
 
-  <ul class="timeline" id="timeline">
-    {% for s in steps %}
-    <li class="timeline-step {{ s.status }}">
-      <strong>Step {{ s.step_order }}:</strong> {{ s.step_name }}
-      {% if s.status == "finished" %}
-        <span class="text-muted">（已完成）</span>
-      {% elif s.status == "running" %}
-        <span class="text-muted">（進行中…）</span>
-      {% else %}
-        <span class="text-muted">（尚未開始）</span>
-      {% endif %}
+  <ul class="timeline">
+    <!-- Step 1 -->
+    <li class="timeline-item">
+      <div class="timeline-status status-finished"></div>
+      <div class="timeline-content">
+        <div class="timeline-header">
+          <strong>Step 1：A1 自動倉儲－放置零件（上蓋）</strong>
+          <span class="badge badge-success ml-1">已完成</span>
+        </div>
+        <div class="timeline-sub text-muted">
+          系統從自動倉儲中取出載有上蓋的托盤，放置到輸送帶上，流程啟動。
+        </div>
+      </div>
     </li>
-    {% endfor %}
+
+    <!-- Step 2 -->
+    <li class="timeline-item">
+      <div class="timeline-status status-finished"></div>
+      <div class="timeline-content">
+        <div class="timeline-header">
+          <strong>Step 2：B 量測－尺寸量測</strong>
+          <span class="badge badge-success ml-1">已完成</span>
+        </div>
+        <div class="timeline-sub text-muted">
+          工件被送往 B 站，雷射感測器量測上蓋高度或厚度，確認是否符合規格。
+        </div>
+      </div>
+    </li>
+
+    <!-- Step 3 -->
+    <li class="timeline-item">
+      <div class="timeline-status status-running"></div>
+      <div class="timeline-content">
+        <div class="timeline-header">
+          <strong>Step 3：C 鑽孔－上蓋鑽孔</strong>
+          <span class="badge badge-primary ml-1">進行中…</span>
+        </div>
+        <div class="timeline-sub text-muted">
+          工件來到 C 站，鑽孔模組透過 X / Z 軸移動，在上蓋上鑽出所需孔位。
+        </div>
+      </div>
+    </li>
+
+    <!-- Step 4 -->
+    <li class="timeline-item">
+      <div class="timeline-status status-pending"></div>
+      <div class="timeline-content">
+        <div class="timeline-header">
+          <strong>Step 4：D 機器人室－PCB 組裝</strong>
+          <span class="badge badge-secondary ml-1">尚未開始</span>
+        </div>
+        <div class="timeline-sub text-muted">
+          在機器人室，六軸工業機器人將 PCB 電路板放入上蓋，並安裝保險絲。
+        </div>
+      </div>
+    </li>
+
+    <!-- Step 5 -->
+    <li class="timeline-item">
+      <div class="timeline-status status-pending"></div>
+      <div class="timeline-content">
+        <div class="timeline-header">
+          <strong>Step 5：E 視覺檢測－組裝檢驗</strong>
+          <span class="badge badge-secondary ml-1">尚未開始</span>
+        </div>
+        <div class="timeline-sub text-muted">
+          工業相機檢查保險絲是否安裝完整、位置與顏色是否正確，判定良品或不良品。
+        </div>
+      </div>
+    </li>
+
+    <!-- Step 6 -->
+    <li class="timeline-item">
+      <div class="timeline-status status-pending"></div>
+      <div class="timeline-content">
+        <div class="timeline-header">
+          <strong>Step 6：F 盒匣－放置下蓋</strong>
+          <span class="badge badge-secondary ml-1">尚未開始</span>
+        </div>
+        <div class="timeline-sub text-muted">
+          盒匣／堆疊模組將下蓋從彈匣中分離並放到托盤上，準備與上蓋結合。
+        </div>
+      </div>
+    </li>
+
+    <!-- Step 7 -->
+    <li class="timeline-item">
+      <div class="timeline-status status-pending"></div>
+      <div class="timeline-content">
+        <div class="timeline-header">
+          <strong>Step 7：G 氣壓壓製－上下蓋壓合</strong>
+          <span class="badge badge-secondary ml-1">尚未開始</span>
+        </div>
+        <div class="timeline-sub text-muted">
+          氣壓肌腱提供壓力，將上蓋與下蓋緊密壓合，完成外殼組裝。
+        </div>
+      </div>
+    </li>
+
+    <!-- Step 8 -->
+    <li class="timeline-item">
+      <div class="timeline-status status-pending"></div>
+      <div class="timeline-content">
+        <div class="timeline-header">
+          <strong>Step 8：H 烘烤加熱－膠合固化</strong>
+          <span class="badge badge-secondary ml-1">尚未開始</span>
+        </div>
+        <div class="timeline-sub text-muted">
+          工件經由下方迴流線進入烘烤加熱站，模擬通過烤箱進行熱處理或膠合固化。
+        </div>
+      </div>
+    </li>
+
+    <!-- Step 9 -->
+    <li class="timeline-item">
+      <div class="timeline-status status-pending"></div>
+      <div class="timeline-content">
+        <div class="timeline-header">
+          <strong>Step 9：A2 自動倉儲－存放成品</strong>
+          <span class="badge badge-secondary ml-1">尚未開始</span>
+        </div>
+        <div class="timeline-sub text-muted">
+          成品回到 A2，自動倉儲機器人將完成的產品放回貨架指定位置，結束整個生產循環。
+        </div>
+      </div>
+    </li>
   </ul>
 </div>
 
+<!-- 產線搬運路徑動畫 Demo -->
+<div class="card">
+  <h3>產線搬運路徑動畫 (Demo)</h3>
+  <p class="text-muted">
+    下方以簡化平面圖示意：中央為自動倉儲 A1/A2，周圍透過 U 型輸送帶串起 D（機器人室）、
+    E（視覺檢測）、F（盒匣）、G（氣壓壓製）等站點。右側的 B（量測）／C（鑽孔）／H（烘烤）
+    則是一條與主線分開的支線，主要由移動式機器人 Robotino 負責搬運。
+    動畫中的小方塊代表 Robotino，示意其在 A1/A2 → B → C → H → 回到 A1/A2 之間往返運送工件。
+  </p>
+
+  <div class="line-legend text-muted">
+    <span class="legend-box legend-belt"></span> 輸送帶　
+    <span class="legend-box legend-station"></span> 站點　
+    <span class="legend-box legend-carrier"></span> 移動式機器人 (Robotino)
+  </div>
+
+  <div class="production-line">
+    <!-- 主輸送帶 -->
+    <div class="belt belt-main"></div>
+    <div class="belt belt-vertical"></div>
+    <div class="belt belt-left"></div>
+
+    <!-- 站點方塊 -->
+    <div class="station station-a1">A1<br><span>自動倉儲<br>(出料)</span></div>
+    <div class="station station-a2">A2<br><span>自動倉儲<br>(入庫)</span></div>
+    <div class="station station-b">B<br><span>量測</span></div>
+    <div class="station station-c">C<br><span>鑽孔</span></div>
+    <div class="station station-h">H<br><span>烘烤加熱</span></div>
+    <div class="station station-d">D<br><span>機器人室</span></div>
+    <div class="station station-e">E<br><span>視覺檢測</span></div>
+    <div class="station station-f">F<br><span>盒匣<br>(下蓋)</span></div>
+    <div class="station station-g">G<br><span>氣壓壓製</span></div>
+    <div class="station station-r">R<br><span>移動機器人</span></div>
+
+    <!-- 搬運中的「移動式機器人」 -->
+    <div class="carrier">
+      <div class="carrier-inner"></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- 下一步操作說明 -->
 <div class="card">
   <h3>下一步操作</h3>
   <p class="text-muted">
     Demo 版本中，你可以：
   </p>
   <ul class="text-muted">
-    <li>觀察流程時間軸樣式，作為期末報告操作示意</li>
-    <li>說明未來如何由 MES 端更新每個步驟的狀態</li>
-    <li>說明前端只要定期輪詢（polling）或用 WebSocket 就可以即時更新畫面</li>
+    <li>搭配報告中的平面配置圖，說明 U 型產線佈局與站點功能。</li>
+    <li>示範如何將 MES / PLC 回傳的站點狀態，映射到時間軸與動畫上。</li>
+    <li>說明前端只要定期輪詢（polling）或用 WebSocket，就可以即時更新畫面。</li>
   </ul>
 
   <div class="mt-2 text-right">
-    <a class="btn btn-secondary" href="{{ url_for('order.order_page') }}">
-      返回重新下單
+    <a class="btn btn-secondary" href="{{ url_for('order.process_plan') }}">
+      返回製程規劃
+    </a>
+    <a class="btn" href="{{ url_for('order.order_page') }}">
+      返回下單頁
     </a>
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-  {# 若之後要做 running 步驟點點跳動，可以在這裡載入 factory_simulate.js #}
+  {# 之後如果要做即時更新，可以在這裡加上 factory_simulate.js，實作 polling 或 WebSocket #}
   {# <script src="{{ url_for('static', filename='js/factory_simulate.js') }}"></script> #}
 {% endblock %}
+
+
 
 
