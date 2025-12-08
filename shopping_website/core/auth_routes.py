@@ -316,4 +316,3 @@ def debug_db():
     lines = [f"{row['id']} - {row['account']}" for row in rows]
     return "<br>".join(lines)
 
-
