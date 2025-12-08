@@ -69,7 +69,7 @@ def login():
                     session["account"] = user["account"]
                     session["role"] = user["role"]
 
-                    # 登入後到下單頁面(order.order_page)
+                    # 登入後到下單頁面（ order.order_page ）
                     return redirect(url_for("order.order_page"))
 
     return render_template("auth/login.html", error_message=error_message)
