@@ -295,6 +295,25 @@ def register_manager():
         success_message=success_message,
     )
 
+# -------------------------------
+# 測試用的資料庫連線檢查 (從 app.py 搬過來的)
+# -------------------------------
+@auth_bp.route("/debug_db")
+def debug_db():
+    from .db import get_user_db  # 注意這裡 import 路徑改成 .db 比較保險
 
+    conn = get_user_db()
+    cur = conn.cursor()
+    # 隨便抓 5 筆資料出來看看
+    cur.execute("SELECT id, account FROM User_profile LIMIT 5")
+    rows = cur.fetchall()
+    conn.close()
+
+    if not rows:
+        return "Database connected, but User_profile table is empty."
+
+    # 簡單回傳字串
+    lines = [f"{row['id']} - {row['account']}" for row in rows]
+    return "<br>".join(lines)
 
 
