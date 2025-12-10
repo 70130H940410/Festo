@@ -15,7 +15,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   // ✅ 2. 首頁才需要顯示 Loader，這邊設定顯示 6000 ms（6 秒）
-  const DISPLAY_MS = 3000;
+  const DISPLAY_MS = 1000;
   const startTime = performance.now();
 
   function hideLoader() {
