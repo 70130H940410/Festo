@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}訂單明細{% endblock %}
+
+{% block content %}
+<h2>訂單明細</h2>
+
+{% if not order %}
+  <p class="text-muted">找不到此訂單。</p>
+  <a href="{{ url_for('manager.manager_orders') }}">← 回訂單總覽</a>
+{% else %}
+  <div class="card">
+    <table>
+      <tbody>
+        <tr><th>訂單ID</th><td>{{ order["order_id"] }}</td></tr>
+        <tr><th>時間</th><td>{{ order["date"] }}</td></tr>
+        <tr><th>客戶</th><td>{{ order["customer_name"] }}</td></tr>
+        <tr><th>產品</th><td>{{ order["product"] }}</td></tr>
+        <tr><th>數量</th><td>{{ order["amount"] }}</td></tr>
+        <tr><th>總價</th><td>{{ order["total_price"] }}</td></tr>
+        <tr><th>製程狀態</th><td>{{ order["step_name"] }}</td></tr>
+        <tr><th>備註</th><td>{{ order["note"] }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="mt-2">
+    <a href="{{ url_for('manager.manager_orders') }}">← 回訂單總覽</a>
+  </div>
+{% endif %}
+{% endblock %}
+

@@ -36,8 +36,13 @@
       <a href="{{ url_for('index') }}">首頁</a>
       <a href="{{ url_for('order.order_page') }}">我要下單</a>
       <a href="{{ url_for('auth.profile') }}">個人資料</a>
-      <a href="{{ url_for('manager.manager_inventory') }}">庫存管理</a>
-      <a href="{{ url_for('manager.manager_process_templates') }}">製程模板管理</a>
+
+      <!-- ✅ 管理者後台（只有 admin 才顯示） -->
+      {% if session.get('role') == 'admin' %}
+        <a href="{{ url_for('manager.manager_inventory') }}">庫存管理</a>
+        <a href="{{ url_for('manager.manager_process_templates') }}">製程模板管理</a>
+        <a href="{{ url_for('manager.manager_orders') }}">訂單總覽</a>
+      {% endif %}
 
       <!-- 右側登入 / 登出 -->
       <span style="margin-left:auto; display:flex; gap:0.75rem; align-items:center;">
@@ -63,6 +68,7 @@
   <script src="{{ url_for('static', filename='js/loader.js') }}"></script>
 </body>
 </html>
+
 
 
 

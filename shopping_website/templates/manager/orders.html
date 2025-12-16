@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}訂單總覽{% endblock %}
+
+{% block content %}
+<h2>訂單總覽</h2>
+<p class="text-muted">管理者查看所有訂單（可搜尋、可依製程狀態篩選）。</p>
+
+<form method="get">
+  <div class="grid-2">
+    <div>
+      <label>搜尋（訂單號 / 客戶 / 產品 / 備註）</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="例如：A0001 / 蔡典儒 / Fuse / 急件">
+    </div>
+
+    <div>
+      <label>狀態（step_name）</label>
+      <select name="step">
+        <option value="">全部</option>
+        {% for s in steps %}
+          <option value="{{ s }}" {% if step == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <div class="mt-2 text-right">
+    <button type="submit">查詢</button>
+    <a class="btn btn-secondary" href="{{ url_for('manager.manager_orders') }}">清除</a>
+  </div>
+</form>
+
+<div class="card">
+  <table>
+    <thead>
+      <tr>
+        <th>訂單ID</th>
+        <th>時間</th>
+        <th>客戶</th>
+        <th>產品</th>
+        <th>數量</th>
+        <th>總價</th>
+        <th>製程狀態</th>
+        <th>備註</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if orders and orders|length > 0 %}
+        {% for o in orders %}
+          <tr>
+            <td>
+              <a href="{{ url_for('manager.manager_order_detail', order_id=o['order_id']) }}">
+                {{ o["order_id"] }}
+              </a>
+            </td>
+            <td>{{ o["date"] }}</td>
+            <td>{{ o["customer_name"] }}</td>
+            <td>{{ o["product"] }}</td>
+            <td>{{ o["amount"] }}</td>
+            <td>{{ o["total_price"] }}</td>
+            <td>{{ o["step_name"] }}</td>
+            <td>{{ o["note"] }}</td>
+          </tr>
+        {% endfor %}
+      {% else %}
+        <tr>
+          <td colspan="8" class="text-center text-muted">沒有符合條件的訂單</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
