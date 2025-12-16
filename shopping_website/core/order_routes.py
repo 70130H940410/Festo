@@ -195,71 +195,82 @@ def submit_order_api():
     """
     接收 JSON 資料，依照您的自訂格式寫入 order_management.db
     功能說明：
-    1. 接收前端勾選的製程步驟 ID。
-    2. 從 Session 讀取購物車內容、使用者帳號。
-    3. 計算總價、串接產品名稱字串、串接製程步驟名稱字串。
-    4. 生成自訂訂單 ID。
-    5. 將所有資料 INSERT 到 orders 表格中。
+    1. 計算總價
+    2. 產生訂單 ID
+    3. 寫入訂單紀錄 (order_management.db)
+    4. [新增] 扣除產品庫存 (product.db)
     """
-    conn_order = None
+    conn_order = None # 訂單資料庫連線
+    conn_prod = None  # 產品資料庫連線 (用於查價、查步驟、扣庫存)
+
     try:
-        # 1. 獲取前端傳來的資料
+        # --- 1. 獲取資料 ---
         data = request.get_json()
-        selected_steps_ids = data.get("selected_steps", []) # 這是步驟 ID 的列表，如 ['1', '2']
+        selected_steps_ids = data.get("selected_steps", [])
         
-        # 2. 獲取 Session 中的購物車與使用者資料
         cart_items = session.get("current_order_items")
         if not cart_items:
             return jsonify({"success": False, "message": "購物車逾時，請重新下單"}), 400
 
         customer_name = session.get("account", "Guest")
         
-        # 3. 資料準備與計算
-        
-        # (A) 處理產品字串 (product) 與 總數量 (amount)
-        # 將產品名稱串接，例如 "黑色保險絲盒 x 2, 白色上蓋 x 1"
-        product_list = [f"{item['name']} x {item['quantity']}" for item in cart_items]
-        product_str = ", ".join(product_list)
-        
-        total_amount = sum(item['quantity'] for item in cart_items)
-        
-        # (B) 計算總價 (total_price)
-        # [修改] 為了避免 session 中的 base_price 遺失或為 0，這裡重新查詢資料庫計算價格
-        total_price = 0
+        # 開啟兩邊的資料庫連線
         conn_prod = get_product_db()
-        cur_prod = conn_prod.cursor()
-        
-        for item in cart_items:
-            # 查詢每個商品的最新單價
-            cur_prod.execute("SELECT base_price FROM products WHERE id = ?", (item['id'],))
-            row = cur_prod.fetchone()
-            if row:
-                price = row['base_price']
-                # 如果資料庫是 NULL，預設為 0
-                if price is None: 
-                    price = 0
-                total_price += price * item['quantity']
-        
-        # (C) 處理製程步驟名稱 (step_name)
-        # 修改為只儲存 step_order，例如 "1 -> 2 -> 3"
-        step_name_str = " -> ".join(map(str, selected_steps_ids))
-
-        # 關閉產品資料庫連線
-        conn_prod.close()
-
-        # (D) 準備其他欄位
-        order_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        note = "無備註" # 您可以預留未來讓前端傳 note 進來: data.get("note", "無備註")
-
-        # 4. 寫入資料庫
         conn_order = get_order_mgmt_db()
         
-        # 生成自訂 ID (如 0001217001)
+        cur_prod = conn_prod.cursor()
+        cur_order = conn_order.cursor()
+        
+        # --- 2. 資料準備與計算 ---
+        
+        # (A) 重新計算總價並確認庫存充足
+        total_price = 0
+        product_names = []
+        
+        for item in cart_items:
+            # 查詢最新價格與庫存
+            cur_prod.execute("SELECT name, base_price, stock FROM products WHERE id = ?", (item['id'],))
+            prod_row = cur_prod.fetchone()
+            
+            if not prod_row:
+                raise Exception(f"找不到產品 ID: {item['id']}")
+            
+            # 安全性檢查：下單前再次確認庫存
+            current_stock = prod_row['stock']
+            if current_stock < item['quantity']:
+                raise Exception(f"產品 {prod_row['name']} 庫存不足 (剩餘 {current_stock})，下單失敗")
+                
+            # 計算價格
+            price = prod_row['base_price'] if prod_row['base_price'] is not None else 0
+            total_price += price * item['quantity']
+            
+            # 串接名稱 (例如 "黑色保險絲盒 x 2")
+            product_names.append(f"{prod_row['name']} x {item['quantity']}")
+            
+            # [新增] 執行扣庫存 SQL (還沒 commit 之前不會真的生效)
+            # stock = stock - quantity
+            cur_prod.execute(
+                "UPDATE products SET stock = stock - ? WHERE id = ?", 
+                (item['quantity'], item['id'])
+            )
+
+        product_str = ", ".join(product_names)
+        total_amount = sum(item['quantity'] for item in cart_items)
+        
+        # (B) 處理製程步驟名稱
+        cur_prod.execute("SELECT step_order, step_name FROM standard_process")
+        step_map = {str(row["step_order"]): row["step_name"] for row in cur_prod.fetchall()}
+        
+        # 這裡改成只存 ID 串接，如您要求
+        step_name_str = " -> ".join(map(str, selected_steps_ids))
+        
+        # (C) 準備訂單欄位
+        order_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        note = "無備註"
         custom_order_id = generate_order_id(conn_order)
         
-        cur = conn_order.cursor()
-        
-        sql = """
+        # --- 3. 寫入訂單資料庫 ---
+        sql_order = """
             INSERT INTO order_list (
                 order_id, 
                 date, 
@@ -272,7 +283,7 @@ def submit_order_api():
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
         
-        cur.execute(sql, (
+        cur_order.execute(sql_order, (
             custom_order_id,
             order_date,
             customer_name,
@@ -283,7 +294,10 @@ def submit_order_api():
             note
         ))
         
-        conn_order.commit()
+        # --- 4. 提交交易 (Commit) ---
+        # 兩個資料庫都沒報錯才儲存
+        conn_prod.commit()  # 提交庫存扣除
+        conn_order.commit() # 提交訂單建立
         
         # 5. 清除購物車
         session.pop("current_order_items", None)
@@ -291,13 +305,16 @@ def submit_order_api():
         return jsonify({
             "success": True, 
             "message": "下單成功！",
-            # 跳轉到模擬頁面，並帶上剛產生的 ID
             "redirect_url": url_for('factory.simulate', order_id=custom_order_id)
         })
 
     except Exception as e:
+        # 若發生任何錯誤，復原變更
+        if conn_prod: conn_prod.rollback()
         if conn_order: conn_order.rollback()
-        print(f"Error: {str(e)}") # 印出錯誤方便除錯
-        return jsonify({"success": False, "message": f"資料庫錯誤: {str(e)}"}), 500
+        print(f"Error during submit_order: {str(e)}")
+        return jsonify({"success": False, "message": f"下單失敗: {str(e)}"}), 500
     finally:
+        # 關閉連線
+        if conn_prod: conn_prod.close()
         if conn_order: conn_order.close()
