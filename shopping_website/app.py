@@ -52,7 +52,7 @@ def create_app() -> Flask:
 if __name__ == "__main__":
     app = create_app()
     # 開發階段開 debug 比較好除錯，之後部署再關掉
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
 
 #from core.auth_routes import auth_bp
 
