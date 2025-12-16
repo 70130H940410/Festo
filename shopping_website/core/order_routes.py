@@ -164,8 +164,7 @@ def generate_order_id(conn):
     cur = conn.cursor()
     # 查詢資料庫中，該分鐘是否已經有訂單 (搜尋 ID 開頭符合的)
     try:
-        # 假設您的表名是 orders，欄位是 order_id
-        cur.execute("SELECT order_id FROM orders WHERE order_id LIKE ? ORDER BY order_id DESC LIMIT 1", (f"{time_prefix}%",))
+        cur.execute("SELECT order_id FROM order_list WHERE order_id LIKE ? ORDER BY order_id DESC LIMIT 1", (f"{time_prefix}%",))
         row = cur.fetchone()
         
         if row:
@@ -257,9 +256,8 @@ def submit_order_api():
         
         cur = conn_order.cursor()
         
-        # 請確認您的表名是否為 orders
         sql = """
-            INSERT INTO orders (
+            INSERT INTO order_list (
                 order_id, 
                 date, 
                 customer_name, 
