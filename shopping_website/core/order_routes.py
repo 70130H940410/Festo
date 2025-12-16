@@ -5,7 +5,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, sessio
 from datetime import datetime
 import time
 from . import login_required
-from .db import get_product_db
+from .db import get_product_db, get_order_mgmt_db
 
 order_bp = Blueprint("order", __name__)
 
