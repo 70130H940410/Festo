@@ -51,9 +51,9 @@ def create_app() -> Flask:
 # 直接 python app.py 執行時用這段
 if __name__ == "__main__":
     # 一般的存取紀錄就會被隱藏，只留下錯誤訊息
-    log = logging.getLogger('werkzeug')
-    log.setLevel(logging.ERROR)
-    
+    #log = logging.getLogger('werkzeug')
+    #log.setLevel(logging.ERROR)
+
     app = create_app()
     # 開發階段開 debug 比較好除錯，之後部署再關掉
     app.run(host='0.0.0.0', port=5000, debug=True)
