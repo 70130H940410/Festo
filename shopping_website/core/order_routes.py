@@ -224,26 +224,29 @@ def submit_order_api():
         total_amount = sum(item['quantity'] for item in cart_items)
         
         # (B) 計算總價 (total_price)
-        # 這裡從 session 取 base_price 計算
-        total_price = sum(item['quantity'] * item.get('base_price', 0) for item in cart_items)
-        
-        # (C) 處理製程步驟名稱 (step_name)
-        # 我們需要根據前端傳來的 ID (selected_steps_ids) 去查出中文名稱
+        # [修改] 為了避免 session 中的 base_price 遺失或為 0，這裡重新查詢資料庫計算價格
+        total_price = 0
         conn_prod = get_product_db()
         cur_prod = conn_prod.cursor()
-        cur_prod.execute("SELECT step_order, step_name FROM standard_process")
-        # 建立對照表: {'1': '揀料', '2': '組裝'...}
-        step_map = {str(row["step_order"]): row["step_name"] for row in cur_prod.fetchall()}
+        
+        for item in cart_items:
+            # 查詢每個商品的最新單價
+            cur_prod.execute("SELECT base_price FROM products WHERE id = ?", (item['id'],))
+            row = cur_prod.fetchone()
+            if row:
+                price = row['base_price']
+                # 如果資料庫是 NULL，預設為 0
+                if price is None: 
+                    price = 0
+                total_price += price * item['quantity']
+        
+        # (C) 處理製程步驟名稱 (step_name)
+        # 修改為只儲存 step_order，例如 "1 -> 2 -> 3"
+        step_name_str = " -> ".join(map(str, selected_steps_ids))
+
+        # 關閉產品資料庫連線
         conn_prod.close()
-        
-        # 根據勾選順序串接名稱
-        selected_step_names = []
-        for sid in selected_steps_ids:
-            name = step_map.get(str(sid), f"步驟{sid}")
-            selected_step_names.append(name)
-        
-        step_name_str = " -> ".join(selected_step_names) # 變成 "揀料 -> 組裝 -> 包裝"
-        
+
         # (D) 準備其他欄位
         order_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         note = "無備註" # 您可以預留未來讓前端傳 note 進來: data.get("note", "無備註")
