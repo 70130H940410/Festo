@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}訂單總覽{% endblock %}
+
+{% block content %}
+<h2>訂單總覽</h2>
+<p class="text-muted">管理者查看所有訂單（可搜尋、可依製程狀態篩選）。</p>
+
+<form method="get" class="toolbar">
+  <input type="text" name="q" value="{{ q }}" placeholder="搜尋：訂單號 / 客戶 / 產品 / 備註">
+
+  <select name="step">
+    <option value="">全部狀態(step_name)</option>
+    {% for s in steps %}
+      <option value="{{ s }}" {% if step == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+
+  <button type="submit">查詢</button>
+  <a class="btn-link" href="{{ url_for('manager.manager_orders') }}">清除</a>
+</form>
+
+<div class="card">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>訂單ID</th>
+        <th>時間</th>
+        <th>客戶</th>
+        <th>產品</th>
+        <th>數量</th>
+        <th>總價</th>
+        <th>製程狀態</th>
+        <th>備註</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if orders and orders|length > 0 %}
+        {% for o in orders %}
+          <tr class="rowlink" onclick="location.href='{{ url_for('manager.manager_order_detail', order_id=o['order_id']) }}'">
+            <td>{{ o["order_id"] }}</td>
+            <td>{{ o["date"] }}</td>
+            <td>{{ o["customer_name"] }}</td>
+            <td>{{ o["product"] }}</td>
+            <td>{{ o["amount"] }}</td>
+            <td>{{ o["total_price"] }}</td>
+            <td>{{ o["step_name"] }}</td>
+            <td class="note">{{ o["note"] }}</td>
+          </tr>
+        {% endfor %}
+      {% else %}
+        <tr>
+          <td colspan="8" class="empty">沒有符合條件的訂單</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+<style>
+  .toolbar{ display:flex; gap:10px; align-items:center; margin:12px 0 18px; flex-wrap:wrap; }
+  .toolbar input{ min-width:260px; flex:1; padding:8px 10px; }
+  .toolbar select{ padding:8px 10px; }
+  .toolbar button{ padding:8px 14px; }
+  .btn-link{ padding:8px 10px; text-decoration:none; border:1px solid #ccc; border-radius:8px; }
+  .card{ background:#fff; border:1px solid #e5e5e5; border-radius:12px; overflow:auto; }
+  .table{ width:100%; border-collapse:collapse; min-width:900px; }
+  .table th, .table td{ padding:10px 12px; border-bottom:1px solid #eee; white-space:nowrap; }
+  .rowlink{ cursor:pointer; }
+  .rowlink:hover{ background:#fafafa; }
+  .note{ max-width:260px; overflow:hidden; text-overflow:ellipsis; }
+  .empty{ text-align:center; padding:20px 0; color:#666; }
+</style>
+{% endblock %}
