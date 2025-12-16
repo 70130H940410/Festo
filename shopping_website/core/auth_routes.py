@@ -11,6 +11,7 @@ from flask import (
     session,
     flash,
 )
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from . import login_required
 from .db import get_user_db
@@ -25,8 +26,8 @@ auth_bp = Blueprint("auth", __name__)
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     """
-    - GET:顯示登入頁
-    - POST:用「帳號或 Email」+ 密碼登入
+    - GET: 顯示登入頁
+    - POST: 用「帳號或 Email」+ 密碼登入
     """
     error_message = None
 
@@ -58,8 +59,6 @@ def login():
             if not user:
                 error_message = "找不到對應的帳號 / Email。"
             else:
-                from werkzeug.security import check_password_hash
-
                 if not check_password_hash(user["password_hash"], password):
                     error_message = "密碼錯誤，請再試一次。"
                 else:
@@ -69,7 +68,6 @@ def login():
                     session["account"] = user["account"]
                     session["role"] = user["role"]
 
-                    # 登入後到下單頁面（ order.order_page ）
                     return redirect(url_for("order.order_page"))
 
     return render_template("auth/login.html", error_message=error_message)
@@ -82,67 +80,135 @@ def logout():
 
 
 # -------------------------------
-# 個人資料頁
+# 個人資料頁（✅含：更新基本資料 + 更新密碼）
 # -------------------------------
 
 @auth_bp.route("/profile", methods=["GET", "POST"])
 @login_required
 def profile():
-    """
-    - GET:顯示目前登入使用者的基本資料
-    - POST:目前只更新 full_name(姓名)
-    """
     user_id = session.get("user_id")
     if not user_id:
         return redirect(url_for("auth.login"))
 
+    error_message = None
+    success_message = None
+
     conn = get_user_db()
     cur = conn.cursor()
 
-    # 把目前使用者資料抓出來
+    # 先抓一次使用者資料
     cur.execute(
-        "SELECT * FROM User_profile WHERE id = ?",
+        """
+        SELECT id, account, full_name, email, role, registration_key, password_hash
+        FROM User_profile
+        WHERE id = ?
+        """,
         (user_id,),
     )
-    user = cur.fetchone()
+    row = cur.fetchone()
 
-    if not user:
+    if not row:
         conn.close()
-        flash("找不到使用者資料，請重新登入。", "error")
         session.clear()
         return redirect(url_for("auth.login"))
 
     if request.method == "POST":
-        # 目前設計：只更新 full_name
-        full_name = request.form.get("full_name", "").strip() or None
+        action = request.form.get("action")
 
+        # ---------- 更新基本資料 ----------
+        if action == "update_profile":
+            full_name = request.form.get("full_name", "").strip()
+            email = request.form.get("email", "").strip()
+
+            # Email 不空才檢查是否被其他人用過
+            if email:
+                cur.execute(
+                    """
+                    SELECT id
+                    FROM User_profile
+                    WHERE email = ? AND id != ?
+                    """,
+                    (email, user_id),
+                )
+                exists_email = cur.fetchone()
+            else:
+                exists_email = None
+
+            if exists_email:
+                error_message = "此 Email 已被其他帳號使用，請改用另一個 Email。"
+            else:
+                cur.execute(
+                    """
+                    UPDATE User_profile
+                    SET full_name = ?, email = ?
+                    WHERE id = ?
+                    """,
+                    (full_name, email, user_id),
+                )
+                conn.commit()
+                success_message = "基本資料已更新。"
+
+        # ---------- 更新密碼（✅你要的：寫回資料庫） ----------
+        elif action == "change_password":
+            current_password = request.form.get("current_password", "")
+            new_password = request.form.get("new_password", "")
+            new_password_confirm = request.form.get("new_password_confirm", "")
+
+            # 重新抓 password_hash 以防資料被更新過
+            cur.execute(
+                "SELECT password_hash FROM User_profile WHERE id = ?",
+                (user_id,),
+            )
+            pw_row = cur.fetchone()
+
+            if not pw_row:
+                error_message = "找不到使用者資料。"
+            elif not check_password_hash(pw_row["password_hash"], current_password):
+                error_message = "目前密碼不正確。"
+            elif not new_password:
+                error_message = "新密碼不可為空白。"
+            elif new_password != new_password_confirm:
+                error_message = "兩次輸入的新密碼不一致。"
+            else:
+                new_hash = generate_password_hash(new_password)
+                cur.execute(
+                    """
+                    UPDATE User_profile
+                    SET password_hash = ?
+                    WHERE id = ?
+                    """,
+                    (new_hash, user_id),
+                )
+                conn.commit()
+                success_message = "密碼已更新。"
+
+        # POST 後再抓一次最新資料（讓畫面顯示更新後的值）
         cur.execute(
             """
-            UPDATE User_profile
-            SET full_name = ?
+            SELECT id, account, full_name, email, role, registration_key
+            FROM User_profile
             WHERE id = ?
             """,
-            (full_name, user_id),
+            (user_id,),
         )
-        conn.commit()
-        conn.close()
-
-        # session 也順便更新一下顯示名稱
-        session["account"] = user["account"]
-        flash("基本資料已更新。", "success")
-        return redirect(url_for("auth.profile"))
+        row = cur.fetchone()
 
     conn.close()
 
-    # 兩種方式都提供，避免 template 名稱對不起來
+    user = {
+        "id": row["id"],
+        "username": row["account"],       # 給 template 用 user['username']
+        "full_name": row["full_name"] or "",
+        "email": row["email"],
+        "role": row["role"],
+        "registration_key": row["registration_key"],
+    }
+
     return render_template(
         "user/profile.html",
         user=user,
-        account=user["account"],
-        full_name=user["full_name"],
-        email=user["email"],
-        role=user["role"],
-        registration=user["registration_key"],
+        error_message=error_message,
+        success_message=success_message,
     )
 
 
@@ -159,13 +225,10 @@ def register_customer():
         account = request.form.get("account", "").strip()
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
-        #password2 = request.form.get("password2", "")
         full_name = request.form.get("full_name", "").strip() or None
 
-        if not account or not email or not password :
+        if not account or not email or not password:
             error_message = "請完整填寫帳號、密碼與Email。"
-        #elif password != password2:
-            #error_message = "兩次輸入的密碼不一致。"
         else:
             conn = get_user_db()
             cur = conn.cursor()
@@ -179,8 +242,6 @@ def register_customer():
             if exists:
                 error_message = "帳號或 Email 已被使用，請改用其他。"
             else:
-                from werkzeug.security import generate_password_hash
-
                 user_id = uuid.uuid4().hex
                 pwd_hash = generate_password_hash(password)
 
@@ -196,7 +257,7 @@ def register_customer():
                         email,
                         pwd_hash,
                         "customer",
-                        None,       # 一般使用者沒有註冊金鑰
+                        None,  # 一般使用者沒有註冊金鑰
                         full_name,
                     ),
                 )
@@ -229,14 +290,11 @@ def register_manager():
         account = request.form.get("account", "").strip()
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
-        #password2 = request.form.get("password2", "")
         full_name = request.form.get("full_name", "").strip() or None
         factory_key = request.form.get("factory_key", "").strip()
 
         if not account or not email or not password or not factory_key:
             error_message = "請完整填寫帳號、密碼、Email與工廠負責人金鑰。"
-        #elif password != password2:
-            #error_message = "兩次輸入的密碼不一致。"
         else:
             conn = get_user_db()
             cur = conn.cursor()
@@ -263,8 +321,6 @@ def register_manager():
                 if exists:
                     error_message = "帳號或 Email 已被使用，請改用其他。"
                 else:
-                    from werkzeug.security import generate_password_hash
-
                     user_id = uuid.uuid4().hex
                     pwd_hash = generate_password_hash(password)
 
@@ -279,7 +335,7 @@ def register_manager():
                             account,
                             email,
                             pwd_hash,
-                            "admin",        # 或 "manager"，看你原本怎麼定義
+                            "admin",        # 或 "manager"
                             factory_key,    # 把使用的金鑰存起來
                             full_name,
                         ),
@@ -295,16 +351,15 @@ def register_manager():
         success_message=success_message,
     )
 
+
 # -------------------------------
-# 測試用的資料庫連線檢查 (從 app.py 搬過來的)
+# 測試用的資料庫連線檢查
 # -------------------------------
+
 @auth_bp.route("/debug_db")
 def debug_db():
-    from .db import get_user_db  # 注意這裡 import 路徑改成 .db 比較保險
-
     conn = get_user_db()
     cur = conn.cursor()
-    # 隨便抓 5 筆資料出來看看
     cur.execute("SELECT id, account FROM User_profile LIMIT 5")
     rows = cur.fetchall()
     conn.close()
@@ -312,7 +367,7 @@ def debug_db():
     if not rows:
         return "Database connected, but User_profile table is empty."
 
-    # 簡單回傳字串
     lines = [f"{row['id']} - {row['account']}" for row in rows]
     return "<br>".join(lines)
+
 
