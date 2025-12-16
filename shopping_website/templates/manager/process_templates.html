@@ -3,13 +3,92 @@
 {% block title %}製程模板管理{% endblock %}
 
 {% block content %}
-<h2>標準製程模板管理</h2>
+<h2>製程模板管理</h2>
+<p class="text-muted">
+  本頁直接管理 product.db 的 standard_process（新增製程步驟、調整每步秒數）。
+</p>
 
-<p>管理標準製程流程，影響下單時的預設製程選項。</p>
+{% if error_message %}
+  <div class="alert alert-error">{{ error_message }}</div>
+{% endif %}
+{% if success_message %}
+  <div class="alert alert-success">{{ success_message }}</div>
+{% endif %}
 
-<ul>
-  <li>Standard Assembly（標準保險絲盒裝配流程）</li>
-</ul>
+<div class="card">
+  <h3>新增製程步驟</h3>
 
-<p>之後可以在這裡加：新增模板、編輯步驟、刪除模板等功能。</p>
+  <form method="post">
+    <input type="hidden" name="action" value="add_step">
+
+    <div class="grid-2">
+      <div>
+        <label>步驟順序（step_order）</label>
+        <input type="number" name="step_order" min="1" required>
+      </div>
+
+      <div>
+        <label>預估秒數（estimated_time_sec）</label>
+        <input type="number" name="estimated_time_sec" min="0" value="0" required>
+      </div>
+    </div>
+
+    <label>步驟名稱（step_name）</label>
+    <input type="text" name="step_name" placeholder="例如：視覺檢測 (Camera Inspection)" required>
+
+    <label>工作站（station）</label>
+    <input type="text" name="station" placeholder="例如：Camera Inspection / E">
+
+    <label>說明（description）</label>
+    <textarea name="description" placeholder="簡短描述這一步做什麼"></textarea>
+
+    <div class="text-right mt-2">
+      <button type="submit">新增步驟</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <h3>現有製程步驟（調整秒數）</h3>
+
+  <form method="post">
+    <input type="hidden" name="action" value="bulk_update_time">
+
+    <table>
+      <thead>
+        <tr>
+          <th>順序</th>
+          <th>步驟名稱</th>
+          <th>工作站</th>
+          <th>說明</th>
+          <th>秒數</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if steps and steps|length > 0 %}
+          {% for s in steps %}
+            <tr>
+              <td>{{ s["step_order"] }}</td>
+              <td>{{ s["step_name"] }}</td>
+              <td>{{ s["station"] }}</td>
+              <td>{{ s["description"] }}</td>
+              <td>
+                <input type="number" min="0" name="time_{{ s['id'] }}" value="{{ s['estimated_time_sec'] or 0 }}">
+              </td>
+            </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="5" class="text-center text-muted">目前 standard_process 沒有資料</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+
+    <div class="text-right mt-2">
+      <button type="submit">儲存秒數變更</button>
+    </div>
+  </form>
+</div>
+
 {% endblock %}
