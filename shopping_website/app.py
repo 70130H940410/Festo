@@ -1,6 +1,6 @@
 # shopping_website/app.py
 import os
-
+import logging
 from flask import Flask, render_template, session
 
 # === 專案路徑 & 資料庫路徑 ===
@@ -50,6 +50,8 @@ def create_app() -> Flask:
 
 # 直接 python app.py 執行時用這段
 if __name__ == "__main__":
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
     app = create_app()
     # 開發階段開 debug 比較好除錯，之後部署再關掉
     app.run(host='0.0.0.0', port=5000, debug=True)

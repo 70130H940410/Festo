@@ -39,12 +39,13 @@
 <div class="card">
   <h3>標準製程流程（Festo 智慧工廠 9 大站點）</h3>
   <p class="text-muted">
-    目前先以固定流程顯示，未來可以讓管理者在「製程模板管理」頁面調整步驟、站點與預估時間。
+    預設全選，可取消不需要的步驟。
   </p>
 
   <table>
     <thead>
       <tr>
+        <th class="text-center" style="width: 70px;">選取</th>
         <th style="width: 60px;">順序</th>
         <th style="width: 220px;">步驟名稱</th>
         <th style="width: 260px;">站點</th>
@@ -55,6 +56,11 @@
     <tbody>
       {% for step in standard_steps %}
       <tr>
+        <td class="text-center">
+            <!-- Checkbox 用於讓 JS 抓取 value (step_order) -->
+            <input type="checkbox" class="step-checkbox" value="{{ step.step_order }}" checked 
+                   style="transform: scale(1.5); cursor: pointer;">
+        </td>
         <td>{{ step.step_order }}</td>
         <td>{{ step.step_name }}</td>
         <td>{{ step.station }}</td>
@@ -66,33 +72,73 @@
   </table>
 </div>
 
-<!-- 下一步操作 -->
+<!-- 3. 操作按鈕 -->
 <div class="card">
-  <h3>下一步要做什麼？</h3>
-  <p class="text-muted">
-    Demo 版本中，點擊「前往工廠運作模擬」即可查看類似 Uber Eats 的產線模擬畫面。之後可以在這裡加入：
-  </p>
-  <ul class="text-muted">
-    <li>調整流程順序（例如拖曳步驟上下移動）</li>
-    <li>新增客製步驟（如額外測試、貼標）</li>
-    <li>按「送出製程」時，真正寫入 orders / order_process_steps 資料表</li>
-  </ul>
-
+  <h3>下一步</h3>
   <div class="mt-2 text-right">
     <a class="btn btn-secondary" href="{{ url_for('order.order_page') }}">
-      返回修改商品數量
+      返回修改
     </a>
-    <a class="btn" href="{{ url_for('factory.simulate') }}">
+    
+    <!-- 按鈕觸發 JS submitOrder() -->
+    <button type="button" id="submitBtn" class="btn btn-primary btn-lg" onclick="submitOrder()">
       下訂單並前往工廠運作模擬 (Demo)
-    </a>
+    </button>
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
-  {# 之後如果要做拖曳排序 / 客製流程，可以在這裡引入 process_plan.js #}
-  {# <script src="{{ url_for('static', filename='js/process_plan.js') }}"></script> #}
+<script>
+function submitOrder() {
+    const btn = document.getElementById("submitBtn");
+    
+    // 1. 蒐集所有被勾選的步驟 ID
+    const checkboxes = document.querySelectorAll('.step-checkbox:checked');
+    const selectedSteps = Array.from(checkboxes).map(cb => cb.value);
+
+    if (selectedSteps.length === 0) {
+        alert("請至少選擇一個製程步驟！");
+        return;
+    }
+
+    // 2. 鎖定按鈕
+    btn.disabled = true;
+    btn.innerText = "處理中...";
+
+    // 3. 使用 fetch 發送 JSON 給後端 API
+    fetch("{{ url_for('order.submit_order_api') }}", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            "selected_steps": selectedSteps
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // 成功：跳轉到後端指定的網址
+            window.location.href = data.redirect_url;
+        } else {
+            // 失敗：顯示錯誤訊息
+            alert("下單失敗：" + data.message);
+            btn.disabled = false;
+            btn.innerText = "下訂單並前往工廠運作模擬 (Demo)";
+        }
+    })
+    .catch(error => {
+        console.error("Error:", error);
+        alert("系統發生錯誤，請稍後再試。");
+        btn.disabled = false;
+        btn.innerText = "下訂單並前往工廠運作模擬 (Demo)";
+    });
+}
+</script>
 {% endblock %}
+
+
 
 
 
