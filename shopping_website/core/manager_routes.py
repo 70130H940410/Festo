@@ -9,7 +9,7 @@ manager_bp = Blueprint("manager", __name__, url_prefix="/manager")
 
 
 # -----------------------------
-# ✅ 自動補欄位：避免 no such column: status / cancelled_at
+# ✅ 自動補欄位：避免 no such column: status / cancelled_at / rejected_at
 # -----------------------------
 def ensure_order_list_schema(conn):
     """
@@ -176,7 +176,7 @@ def manager_process_templates():
 
 
 # -----------------------------
-# ✅ 訂單總覽（支援 rowid 搜尋 + step 篩選 + 勾選顯示 rejected/cancelled）
+# ✅ 訂單總覽（支援 rowid 搜尋 + step 篩選 + 勾選顯示 rejected/cancelled/completed）
 # 預設只顯示 active
 # -----------------------------
 @manager_bp.route("/orders", methods=["GET"])
@@ -185,9 +185,10 @@ def manager_orders():
     q = request.args.get("q", "").strip()
     step = request.args.get("step", "").strip()
 
-    # ✅ 兩個勾選：顯示 rejected / cancelled
+    # ✅ 三個勾選：顯示 rejected / cancelled / completed
     show_rejected = request.args.get("show_rejected") == "1"
     show_cancelled = request.args.get("show_cancelled") == "1"
+    show_completed = request.args.get("show_completed") == "1"
 
     conn = get_order_mgmt_db()
     ensure_order_list_schema(conn)
@@ -203,12 +204,14 @@ def manager_orders():
     """
     params = []
 
-    # ✅ status：預設只 active，勾選才加入 rejected/cancelled
+    # ✅ status：預設只 active，勾選才加入 rejected/cancelled/completed
     allowed_status = ["active"]
     if show_rejected:
         allowed_status.append("rejected")
     if show_cancelled:
         allowed_status.append("cancelled")
+    if show_completed:
+        allowed_status.append("completed")
 
     base_sql += f" AND status IN ({','.join(['?'] * len(allowed_status))}) "
     params.extend(allowed_status)
@@ -269,6 +272,7 @@ def manager_orders():
         steps=steps,
         show_rejected=show_rejected,
         show_cancelled=show_cancelled,
+        show_completed=show_completed,  # ✅ 一定要傳給前端
     )
 
 
@@ -296,7 +300,7 @@ def manager_order_detail(order_id):
 
 
 # ✅ 管理者：拒絕訂單（保留紀錄）
-# ✅ 重點：如果訂單已經被客戶 cancelled，就不能再拒絕
+# ✅ 重點：cancelled / completed 的單不能再拒絕
 @manager_bp.route("/orders/<order_id>/delete", methods=["POST"])
 @manager_required
 def manager_order_delete(order_id):
@@ -310,6 +314,7 @@ def manager_order_delete(order_id):
     step = (request.form.get("step") or "").strip()
     show_rejected = (request.form.get("show_rejected") or "") == "1"
     show_cancelled = (request.form.get("show_cancelled") or "") == "1"
+    show_completed = (request.form.get("show_completed") or "") == "1"
 
     kwargs = {}
     if q:
@@ -320,12 +325,13 @@ def manager_order_delete(order_id):
         kwargs["show_rejected"] = "1"
     if show_cancelled:
         kwargs["show_cancelled"] = "1"
+    if show_completed:
+        kwargs["show_completed"] = "1"
 
     conn = get_order_mgmt_db()
     ensure_order_list_schema(conn)
     cur = conn.cursor()
 
-    # ✅ cancelled 就不能再拒絕
     cur.execute("SELECT status FROM order_list WHERE order_id = ?", (order_id,))
     row = cur.fetchone()
 
@@ -339,6 +345,11 @@ def manager_order_delete(order_id):
     if status == "cancelled":
         conn.close()
         flash("此訂單已被客戶取消，無法再拒絕。", "warning")
+        return redirect(url_for("manager.manager_orders", **kwargs))
+
+    if status == "completed":
+        conn.close()
+        flash("此訂單已完成，無法再拒絕。", "warning")
         return redirect(url_for("manager.manager_orders", **kwargs))
 
     if status == "rejected":
@@ -364,4 +375,3 @@ def manager_order_delete(order_id):
 
     flash("✅ 已拒絕訂單（保留紀錄）", "success")
     return redirect(url_for("manager.manager_orders", **kwargs))
-
