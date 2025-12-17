@@ -22,7 +22,7 @@ order_bp = Blueprint("order", __name__)
 
 
 # -----------------------------
-# ✅ 自動補欄位：避免 no such column: status
+# 自動補欄位：避免 no such column: status
 # -----------------------------
 def ensure_order_list_schema(conn):
     """
@@ -243,7 +243,7 @@ def submit_order_api():
 
         conn_prod = get_product_db()
         conn_order = get_order_mgmt_db()
-        ensure_order_list_schema(conn_order)  # ✅ 先補欄位（status/rejected_at/cancelled_at）
+        ensure_order_list_schema(conn_order)  # 先補欄位（status/rejected_at/cancelled_at）
 
         cur_prod = conn_prod.cursor()
         cur_order = conn_order.cursor()
@@ -355,7 +355,7 @@ def order_history():
     customer_name = session.get("account", "Guest")
 
     conn = get_order_mgmt_db()
-    ensure_order_list_schema(conn)  # ✅ 先補欄位再查
+    ensure_order_list_schema(conn)  # 先補欄位再查
     cur = conn.cursor()
     cur.execute(
         """
@@ -399,14 +399,14 @@ def cancel_my_order(order_id):
         flash("找不到該訂單", "danger")
         return redirect(url_for("order.order_history"))
 
-    # ✅ 只能取消自己的訂單
+    # 只能取消自己的訂單
     if row["customer_name"] != customer_name:
         conn.close()
         abort(403)
 
     status = (row["status"] or "active")
 
-    # ✅ 已拒絕/已取消不能再取消
+    # 已拒絕/已取消不能再取消
     if status in ("rejected", "cancelled"):
         conn.close()
         flash("此訂單目前無法取消（可能已被拒絕或已取消）", "warning")
@@ -429,5 +429,5 @@ def cancel_my_order(order_id):
     conn.commit()
     conn.close()
 
-    flash("✅ 已取消訂單（已保留紀錄）", "success")
+    flash("已取消訂單（已保留紀錄）", "success")
     return redirect(url_for("order.order_history"))
