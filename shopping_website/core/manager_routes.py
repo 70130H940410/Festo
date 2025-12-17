@@ -9,11 +9,11 @@ manager_bp = Blueprint("manager", __name__, url_prefix="/manager")
 
 
 # -----------------------------
-# ✅ 自動補欄位：避免 no such column: status
+# ✅ 自動補欄位：避免 no such column: status / cancelled_at
 # -----------------------------
 def ensure_order_list_schema(conn):
     """
-    確保 order_list 有 status / rejected_at 欄位（沒有就自動補上）
+    確保 order_list 有 status / rejected_at / cancelled_at 欄位（沒有就自動補上）
     """
     cur = conn.cursor()
     try:
@@ -26,6 +26,10 @@ def ensure_order_list_schema(conn):
 
         if "rejected_at" not in cols:
             cur.execute("ALTER TABLE order_list ADD COLUMN rejected_at TEXT")
+            changed = True
+
+        if "cancelled_at" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN cancelled_at TEXT")
             changed = True
 
         if changed:
@@ -88,12 +92,13 @@ def manager_process_templates():
     if request.method == "POST":
         action = request.form.get("action", "")
 
+        # ✅ 新增步驟
         if action == "add_step":
             try:
-                step_order = int(request.form.get("step_order", "").strip())
-                step_name = request.form.get("step_name", "").strip()
-                station = request.form.get("station", "").strip()
-                description = request.form.get("description", "").strip()
+                step_order = int((request.form.get("step_order") or "").strip())
+                step_name = (request.form.get("step_name") or "").strip()
+                station = (request.form.get("station") or "").strip()
+                description = (request.form.get("description") or "").strip()
                 estimated_time_sec = int((request.form.get("estimated_time_sec", "0") or "0").strip())
 
                 if step_order <= 0:
@@ -109,8 +114,8 @@ def manager_process_templates():
 
                 cur.execute(
                     """
-                    INSERT INTO standard_process (step_order, step_name, station, description note, estimated_time_sec)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO standard_process (step_order, step_name, station, description, estimated_time_sec)
+                    VALUES (?, ?, ?, ?, ?)
                     """,
                     (step_order, step_name, station, description, estimated_time_sec),
                 )
@@ -120,6 +125,7 @@ def manager_process_templates():
                 conn.rollback()
                 error_message = f"❌ 新增失敗：{e}"
 
+        # ✅ 批次更新秒數
         elif action == "bulk_update_time":
             try:
                 cur.execute("SELECT id, estimated_time_sec FROM standard_process")
@@ -170,32 +176,44 @@ def manager_process_templates():
 
 
 # -----------------------------
-# 訂單總覽（支援 rowid 搜尋 + 預設隱藏 rejected）
+# ✅ 訂單總覽（支援 rowid 搜尋 + step 篩選 + 勾選顯示 rejected/cancelled）
+# 預設只顯示 active
 # -----------------------------
 @manager_bp.route("/orders", methods=["GET"])
 @manager_required
 def manager_orders():
     q = request.args.get("q", "").strip()
     step = request.args.get("step", "").strip()
-    show = request.args.get("show", "").strip()  # show=rejected 才顯示被拒絕
+
+    # ✅ 兩個勾選：顯示 rejected / cancelled
+    show_rejected = request.args.get("show_rejected") == "1"
+    show_cancelled = request.args.get("show_cancelled") == "1"
 
     conn = get_order_mgmt_db()
-    ensure_order_list_schema(conn)  # ✅ 先補欄位再查
+    ensure_order_list_schema(conn)
     cur = conn.cursor()
 
     base_sql = """
         SELECT
             rowid AS id,
             order_id, date, customer_name, product, amount, total_price,
-            step_name, note, status, rejected_at
+            step_name, note, status, rejected_at, cancelled_at
         FROM order_list
         WHERE 1=1
     """
     params = []
 
-    if show != "rejected":
-        base_sql += " AND (status IS NULL OR status != 'rejected')"
+    # ✅ status：預設只 active，勾選才加入 rejected/cancelled
+    allowed_status = ["active"]
+    if show_rejected:
+        allowed_status.append("rejected")
+    if show_cancelled:
+        allowed_status.append("cancelled")
 
+    base_sql += f" AND status IN ({','.join(['?'] * len(allowed_status))}) "
+    params.extend(allowed_status)
+
+    # ✅ 搜尋（訂單ID / 客戶 / 產品 / 備註 / ID(rowid)）
     if q:
         like = f"%{q}%"
         if q.isdigit():
@@ -220,6 +238,7 @@ def manager_orders():
             """
             params += [like, like, like, like]
 
+    # ✅ step 篩選
     if step:
         base_sql += " AND step_name = ?"
         params.append(step)
@@ -229,19 +248,27 @@ def manager_orders():
     cur.execute(base_sql, params)
     orders = cur.fetchall()
 
-    cur.execute("""
+    # step 下拉選單（抓所有不同 step_name）
+    cur.execute(
+        """
         SELECT DISTINCT step_name
         FROM order_list
         WHERE step_name IS NOT NULL AND step_name != ''
         ORDER BY step_name
-    """)
+        """
+    )
     steps = [r["step_name"] for r in cur.fetchall()]
 
     conn.close()
 
     return render_template(
         "manager/orders.html",
-        orders=orders, q=q, step=step, steps=steps, show=show
+        orders=orders,
+        q=q,
+        step=step,
+        steps=steps,
+        show_rejected=show_rejected,
+        show_cancelled=show_cancelled,
     )
 
 
@@ -257,7 +284,7 @@ def manager_order_detail(order_id):
         SELECT
             rowid AS id,
             order_id, date, customer_name, product, amount, total_price,
-            step_name, note, status, rejected_at
+            step_name, note, status, rejected_at, cancelled_at
         FROM order_list
         WHERE order_id = ?
         """,
@@ -268,21 +295,59 @@ def manager_order_detail(order_id):
     return render_template("manager/order_detail.html", order=order)
 
 
-# ✅ 刪單（改為：拒絕訂單/保留紀錄）
+# ✅ 管理者：拒絕訂單（保留紀錄）
+# ✅ 重點：如果訂單已經被客戶 cancelled，就不能再拒絕
 @manager_bp.route("/orders/<order_id>/delete", methods=["POST"])
 @manager_required
 def manager_order_delete(order_id):
     reason = (request.form.get("reason") or "").strip()
     if not reason:
-        flash("❌ 請選擇刪除/拒絕原因", "danger")
+        flash("❌ 請選擇拒絕原因", "danger")
         return redirect(url_for("manager.manager_orders"))
 
-    note_text = f"你的訂單已被工廠拒絕：{reason}"
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # ✅ 保留原查詢條件 + 勾選狀態
+    q = (request.form.get("q") or "").strip()
+    step = (request.form.get("step") or "").strip()
+    show_rejected = (request.form.get("show_rejected") or "") == "1"
+    show_cancelled = (request.form.get("show_cancelled") or "") == "1"
+
+    kwargs = {}
+    if q:
+        kwargs["q"] = q
+    if step:
+        kwargs["step"] = step
+    if show_rejected:
+        kwargs["show_rejected"] = "1"
+    if show_cancelled:
+        kwargs["show_cancelled"] = "1"
 
     conn = get_order_mgmt_db()
     ensure_order_list_schema(conn)
     cur = conn.cursor()
+
+    # ✅ cancelled 就不能再拒絕
+    cur.execute("SELECT status FROM order_list WHERE order_id = ?", (order_id,))
+    row = cur.fetchone()
+
+    if not row:
+        conn.close()
+        flash("找不到該訂單", "danger")
+        return redirect(url_for("manager.manager_orders", **kwargs))
+
+    status = (row["status"] or "active")
+
+    if status == "cancelled":
+        conn.close()
+        flash("此訂單已被客戶取消，無法再拒絕。", "warning")
+        return redirect(url_for("manager.manager_orders", **kwargs))
+
+    if status == "rejected":
+        conn.close()
+        flash("此訂單已拒絕，無法重複拒絕。", "warning")
+        return redirect(url_for("manager.manager_orders", **kwargs))
+
+    note_text = f"你的訂單已被工廠拒絕：{reason}"
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     cur.execute(
         """
@@ -297,25 +362,6 @@ def manager_order_delete(order_id):
     conn.commit()
     conn.close()
 
-    # ✅ 保留原查詢條件（如果你 orders.html 有 hidden inputs）
-    q = (request.form.get("q") or "").strip()
-    step = (request.form.get("step") or "").strip()
-    show = (request.form.get("show") or "").strip()
-
-    kwargs = {}
-    if q:
-        kwargs["q"] = q
-    if step:
-        kwargs["step"] = step
-    if show:
-        kwargs["show"] = show
-
     flash("✅ 已拒絕訂單（保留紀錄）", "success")
     return redirect(url_for("manager.manager_orders", **kwargs))
-
-
-
-
-
-
 
