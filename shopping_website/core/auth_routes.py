@@ -1,7 +1,7 @@
 # core/auth_routes.py
 # 負責登入 / 登出 / 註冊 / 個人資料
 
-import uuid
+import secrets
 from flask import (
     Blueprint,
     render_template,
@@ -56,19 +56,17 @@ def login():
             user = cur.fetchone()
             conn.close()
 
-            if not user:
-                error_message = "找不到對應的帳號 / Email。"
-            else:
-                if not check_password_hash(user["password_hash"], password):
-                    error_message = "密碼錯誤，請再試一次。"
-                else:
-                    # 登入成功
-                    session.clear()
-                    session["user_id"] = user["id"]
-                    session["account"] = user["account"]
-                    session["role"] = user["role"]
+            if user and check_password_hash(user["password_hash"], password):
+                # 登入成功
+                session.clear()
+                session["user_id"] = user["id"]
+                session["account"] = user["account"]
+                session["role"] = user["role"]
 
-                    return redirect(url_for("order.order_page"))
+                return redirect(url_for("order.order_page"))
+            else:
+                # 登入失敗 (帳號不存在 或 密碼錯誤)
+                error_message = "帳號或密碼錯誤，請再試一次。"
 
     return render_template("auth/login.html", error_message=error_message)
 
@@ -148,7 +146,7 @@ def profile():
                 conn.commit()
                 success_message = "基本資料已更新。"
 
-        # ---------- 更新密碼（✅你要的：寫回資料庫） ----------
+        # ---------- 更新密碼（你要的：寫回資料庫） ----------
         elif action == "change_password":
             current_password = request.form.get("current_password", "")
             new_password = request.form.get("new_password", "")
@@ -242,7 +240,7 @@ def register_customer():
             if exists:
                 error_message = "帳號或 Email 已被使用，請改用其他。"
             else:
-                user_id = uuid.uuid4().hex
+                user_id = user_id = secrets.token_hex(6)
                 pwd_hash = generate_password_hash(password)
 
                 cur.execute(
@@ -321,7 +319,7 @@ def register_manager():
                 if exists:
                     error_message = "帳號或 Email 已被使用，請改用其他。"
                 else:
-                    user_id = uuid.uuid4().hex
+                    user_id = user_id = secrets.token_hex(6)
                     pwd_hash = generate_password_hash(password)
 
                     cur.execute(
