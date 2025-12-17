@@ -1,7 +1,7 @@
 # core/auth_routes.py
 # 負責登入 / 登出 / 註冊 / 個人資料
 
-import uuid
+import secrets
 from flask import (
     Blueprint,
     render_template,
@@ -146,7 +146,7 @@ def profile():
                 conn.commit()
                 success_message = "基本資料已更新。"
 
-        # ---------- 更新密碼（✅你要的：寫回資料庫） ----------
+        # ---------- 更新密碼（你要的：寫回資料庫） ----------
         elif action == "change_password":
             current_password = request.form.get("current_password", "")
             new_password = request.form.get("new_password", "")
@@ -240,7 +240,7 @@ def register_customer():
             if exists:
                 error_message = "帳號或 Email 已被使用，請改用其他。"
             else:
-                user_id = uuid.uuid4().hex
+                user_id = user_id = secrets.token_hex(6)
                 pwd_hash = generate_password_hash(password)
 
                 cur.execute(
@@ -319,7 +319,7 @@ def register_manager():
                 if exists:
                     error_message = "帳號或 Email 已被使用，請改用其他。"
                 else:
-                    user_id = uuid.uuid4().hex
+                    user_id = user_id = secrets.token_hex(6)
                     pwd_hash = generate_password_hash(password)
 
                     cur.execute(
