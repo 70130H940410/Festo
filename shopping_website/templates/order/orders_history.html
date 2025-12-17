@@ -3,13 +3,16 @@
 
 {% block content %}
 <h2 class="page-title">我的訂單紀錄</h2>
-<p class="text-muted">可查看你的歷史訂單；若被拒絕/取消，備註會顯示原因。</p>
+<p class="text-muted">
+  可查看你的歷史訂單；若被拒絕/取消/完成，備註會顯示原因或紀錄。
+  <b>點訂單編號可直接進入模擬頁。</b>
+</p>
 
 <div class="table-wrap">
   <table class="table-orders table-user-orders">
     <thead>
       <tr>
-        <th>訂單編號</th>
+        <th>訂單編號（點我進模擬）</th>
         <th>時間</th>
         <th>商品</th>
         <th>數量</th>
@@ -23,11 +26,17 @@
     <tbody>
       {% if orders and orders|length > 0 %}
         {% for o in orders %}
-          {% set is_rejected = (o["status"] == "rejected") %}
-          {% set is_cancelled = (o["status"] == "cancelled") %}
+          {% set st = o["status"] %}
+          {% set is_rejected = (st == "rejected") %}
+          {% set is_cancelled = (st == "cancelled") %}
+          {% set is_completed = (st == "completed") %}
 
-          <tr class="{% if is_rejected %}row-rejected{% endif %} {% if is_cancelled %}row-cancelled{% endif %}">
-            <td class="mono">{{ o["order_id"] }}</td>
+          <tr class="{% if is_rejected %}row-rejected{% endif %} {% if is_cancelled %}row-cancelled{% endif %} {% if is_completed %}row-completed{% endif %}">
+            <td class="mono">
+              <a href="{{ url_for('factory.simulate', order_id=o['order_id']) }}" title="進入製程模擬">
+                {{ o["order_id"] }}
+              </a>
+            </td>
             <td>{{ o["date"] }}</td>
             <td class="cell-wrap">{{ o["product"] }}</td>
             <td>{{ o["amount"] }}</td>
@@ -38,6 +47,8 @@
                 <span class="badge badge-danger">已拒絕</span>
               {% elif is_cancelled %}
                 <span class="badge badge-muted">已取消</span>
+              {% elif is_completed %}
+                <span class="badge badge-info">已完成</span>
               {% else %}
                 <span class="badge badge-success">處理中</span>
               {% endif %}
@@ -46,12 +57,13 @@
             <td class="cell-note">{{ o["note"] }}</td>
 
             <td class="cell-actions">
-              {% if (not is_rejected) and (not is_cancelled) %}
+              {% if st == "active" %}
                 <form class="actions-row"
                       method="post"
                       action="{{ url_for('order.cancel_my_order', order_id=o['order_id']) }}"
-                      onsubmit="return confirm('確定要取消這筆訂單嗎？');">
+                      data-confirm="確定要取消這筆訂單嗎？">
 
+                  <!-- ✅ 按鈕左、下拉右（你之前要求的排列） -->
                   <button type="submit" class="btn btn-danger btn-cancel">取消訂單</button>
 
                   <select name="reason" required class="select-reason">
@@ -78,6 +90,5 @@
   </table>
 </div>
 {% endblock %}
-
 
 

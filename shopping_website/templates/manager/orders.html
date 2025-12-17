@@ -4,7 +4,9 @@
 {% block content %}
 <h2 class="page-title">訂單總覽</h2>
 <p class="text-muted">
-  管理者查看所有訂單（可搜尋、可依製程狀態篩選）。搜尋欄可輸入：訂單ID / 客戶 / 產品 / 備註 / ID(rowid)。
+  管理者查看所有訂單（可搜尋、可依製程狀態篩選）。
+  搜尋欄可輸入：訂單ID / 客戶 / 產品 / 備註 / ID(rowid)。
+  <b>點訂單ID可直接進入模擬頁。</b>
 </p>
 
 <form method="get">
@@ -25,7 +27,7 @@
     </div>
   </div>
 
-  <!-- ✅ 新增：顯示 rejected / cancelled -->
+  <!-- ✅ 顯示狀態篩選 -->
   <div class="mt-2" style="display:flex; gap:18px; flex-wrap:wrap;">
     <label style="display:flex; align-items:center; gap:8px;">
       <input type="checkbox" name="show_rejected" value="1" {% if show_rejected %}checked{% endif %}>
@@ -35,6 +37,11 @@
     <label style="display:flex; align-items:center; gap:8px;">
       <input type="checkbox" name="show_cancelled" value="1" {% if show_cancelled %}checked{% endif %}>
       顯示客戶取消（cancelled）
+    </label>
+
+    <label style="display:flex; align-items:center; gap:8px;">
+      <input type="checkbox" name="show_completed" value="1" {% if show_completed %}checked{% endif %}>
+      顯示已完成（completed）
     </label>
   </div>
 
@@ -49,7 +56,7 @@
     <thead>
       <tr>
         <th>ID</th>
-        <th>訂單ID</th>
+        <th>訂單ID（點我進模擬）</th>
         <th>時間</th>
         <th>客戶</th>
         <th>產品</th>
@@ -68,14 +75,20 @@
           {% set st = o["status"] %}
           {% set is_rejected = (st == "rejected") %}
           {% set is_cancelled = (st == "cancelled") %}
+          {% set is_completed = (st == "completed") %}
 
-          <tr {% if is_rejected %}style="opacity:0.9;"{% endif %}>
+          <tr class="{% if is_rejected %}row-rejected{% endif %} {% if is_cancelled %}row-cancelled{% endif %} {% if is_completed %}row-completed{% endif %}">
             <td>{{ o["id"] }}</td>
 
             <td class="mono">
-              <a href="{{ url_for('manager.manager_order_detail', order_id=o['order_id']) }}">
+              <!-- ✅ 點訂單ID直接進入模擬頁 -->
+              <a href="{{ url_for('factory.simulate', order_id=o['order_id']) }}" title="進入製程模擬">
                 {{ o["order_id"] }}
               </a>
+              <!-- 保留詳情 -->
+              <div style="margin-top:4px; font-size:12px;">
+                <a class="text-muted" href="{{ url_for('manager.manager_order_detail', order_id=o['order_id']) }}">查看詳情</a>
+              </div>
             </td>
 
             <td>{{ o["date"] }}</td>
@@ -83,7 +96,6 @@
             <td class="cell-wrap">{{ o["product"] }}</td>
             <td>{{ o["amount"] }}</td>
             <td>{{ o["total_price"] }}</td>
-
             <td class="cell-wrap">{{ o["step_name"] }}</td>
 
             <td>
@@ -91,6 +103,8 @@
                 <span class="badge badge-danger">rejected</span>
               {% elif is_cancelled %}
                 <span class="badge badge-muted">cancelled</span>
+              {% elif is_completed %}
+                <span class="badge badge-info">completed</span>
               {% else %}
                 <span class="badge badge-success">active</span>
               {% endif %}
@@ -99,15 +113,18 @@
             <td class="cell-note">{{ o["note"] }}</td>
 
             <td>
-              {% if (not is_rejected) and (not is_cancelled) %}
+              <!-- ✅ 只有 active 才能拒絕；cancelled/completed/rejected 都顯示 — -->
+              {% if st == "active" %}
                 <form method="post"
                       action="{{ url_for('manager.manager_order_delete', order_id=o['order_id']) }}"
                       data-confirm="確定要拒絕/刪單 {{ o['order_id'] }} 嗎？此操作會保留紀錄，但會標記為 rejected。">
 
+                  <!-- 保留查詢條件 -->
                   <input type="hidden" name="q" value="{{ q }}">
                   <input type="hidden" name="step" value="{{ step }}">
                   <input type="hidden" name="show_rejected" value="{{ '1' if show_rejected else '' }}">
                   <input type="hidden" name="show_cancelled" value="{{ '1' if show_cancelled else '' }}">
+                  <input type="hidden" name="show_completed" value="{{ '1' if show_completed else '' }}">
 
                   <select name="reason" required>
                     <option value="" disabled selected>選擇拒絕原因</option>
@@ -135,7 +152,3 @@
   </table>
 </div>
 {% endblock %}
-
-
-
-
