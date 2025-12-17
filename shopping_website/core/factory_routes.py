@@ -408,6 +408,12 @@ def simulate():
         if not o:
             abort(404, "order not found")
 
+        # ✅ 權限：非 admin 只能看自己的訂單（避免改網址偷看）
+        if session.get("role") != "admin":
+            me = session.get("account") or session.get("username") or session.get("full_name")
+            if (not me) or ((o["customer_name"] or "") != me):
+                abort(403)
+
         chain = _parse_step_chain(o["step_name"] or "")
         if not chain:
             abort(400, "this order has empty step_name (step chain)")
@@ -458,7 +464,7 @@ def simulate():
 
         order_info = {
             "order_id": o["order_id"],
-            "user_name": o["customer_name"] or session.get("full_name") or session.get("username", "Demo User"),
+            "user_name": o["customer_name"] or (session.get("account") or session.get("full_name") or session.get("username", "Demo User")),
             "note": o["note"] or "無備註",
             "status": (o["status"] or "").lower(),
             "amount": amount,

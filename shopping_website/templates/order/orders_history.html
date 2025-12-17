@@ -3,13 +3,16 @@
 
 {% block content %}
 <h2 class="page-title">我的訂單紀錄</h2>
-<p class="text-muted">可查看你的歷史訂單；若被拒絕/取消/完成，備註會顯示原因或紀錄。</p>
+<p class="text-muted">
+  可查看你的歷史訂單；若被拒絕/取消/完成，備註會顯示原因或紀錄。
+  <b>點訂單編號可直接進入模擬頁。</b>
+</p>
 
 <div class="table-wrap">
   <table class="table-orders table-user-orders">
     <thead>
       <tr>
-        <th>訂單編號</th>
+        <th>訂單編號（點我進模擬）</th>
         <th>時間</th>
         <th>商品</th>
         <th>數量</th>
@@ -26,10 +29,14 @@
           {% set st = o["status"] %}
           {% set is_rejected = (st == "rejected") %}
           {% set is_cancelled = (st == "cancelled") %}
-          {% set is_completed = (st == "completed" or st == "complete") %}
+          {% set is_completed = (st == "completed") %}
 
           <tr class="{% if is_rejected %}row-rejected{% endif %} {% if is_cancelled %}row-cancelled{% endif %} {% if is_completed %}row-completed{% endif %}">
-            <td class="mono">{{ o["order_id"] }}</td>
+            <td class="mono">
+              <a href="{{ url_for('factory.simulate', order_id=o['order_id']) }}" title="進入製程模擬">
+                {{ o["order_id"] }}
+              </a>
+            </td>
             <td>{{ o["date"] }}</td>
             <td class="cell-wrap">{{ o["product"] }}</td>
             <td>{{ o["amount"] }}</td>
@@ -41,7 +48,7 @@
               {% elif is_cancelled %}
                 <span class="badge badge-muted">已取消</span>
               {% elif is_completed %}
-                <span class="badge badge-primary">已完成</span>
+                <span class="badge badge-info">已完成</span>
               {% else %}
                 <span class="badge badge-success">處理中</span>
               {% endif %}
@@ -56,10 +63,9 @@
                       action="{{ url_for('order.cancel_my_order', order_id=o['order_id']) }}"
                       data-confirm="確定要取消這筆訂單嗎？">
 
-                  <!-- ✅ 取消按鈕 -->
+                  <!-- ✅ 按鈕左、下拉右（你之前要求的排列） -->
                   <button type="submit" class="btn btn-danger btn-cancel">取消訂單</button>
 
-                  <!-- ✅ 下拉選單在按鈕右側 -->
                   <select name="reason" required class="select-reason">
                     <option value="" disabled selected>選擇取消原因</option>
                     <option value="改變心意">改變心意</option>
@@ -67,6 +73,7 @@
                     <option value="下錯商品/數量">下錯商品/數量</option>
                     <option value="其他原因">其他原因</option>
                   </select>
+
                 </form>
               {% else %}
                 <span class="text-muted">—</span>
