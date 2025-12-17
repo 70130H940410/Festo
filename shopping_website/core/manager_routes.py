@@ -1,10 +1,38 @@
 # shopping_website/core/manager_routes.py
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
+from datetime import datetime
 from . import manager_required
 from .db import get_product_db, get_order_mgmt_db
 
 manager_bp = Blueprint("manager", __name__, url_prefix="/manager")
+
+
+# -----------------------------
+# ✅ 自動補欄位：避免 no such column: status
+# -----------------------------
+def ensure_order_list_schema(conn):
+    """
+    確保 order_list 有 status / rejected_at 欄位（沒有就自動補上）
+    """
+    cur = conn.cursor()
+    try:
+        cols = [r[1] for r in cur.execute("PRAGMA table_info(order_list)").fetchall()]
+        changed = False
+
+        if "status" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN status TEXT DEFAULT 'active'")
+            changed = True
+
+        if "rejected_at" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN rejected_at TEXT")
+            changed = True
+
+        if changed:
+            conn.commit()
+    except Exception:
+        # 不要讓 migration 影響頁面（表不存在等狀況）
+        pass
 
 
 # -----------------------------
@@ -81,8 +109,8 @@ def manager_process_templates():
 
                 cur.execute(
                     """
-                    INSERT INTO standard_process (step_order, step_name, station, description, estimated_time_sec)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO standard_process (step_order, step_name, station, description note, estimated_time_sec)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (step_order, step_name, station, description, estimated_time_sec),
                 )
@@ -142,23 +170,31 @@ def manager_process_templates():
 
 
 # -----------------------------
-# 訂單總覽（支援用 rowid 當作 id 搜尋）
+# 訂單總覽（支援 rowid 搜尋 + 預設隱藏 rejected）
 # -----------------------------
 @manager_bp.route("/orders", methods=["GET"])
 @manager_required
 def manager_orders():
     q = request.args.get("q", "").strip()
     step = request.args.get("step", "").strip()
+    show = request.args.get("show", "").strip()  # show=rejected 才顯示被拒絕
 
     conn = get_order_mgmt_db()
+    ensure_order_list_schema(conn)  # ✅ 先補欄位再查
     cur = conn.cursor()
 
     base_sql = """
-        SELECT rowid AS id, order_id, date, customer_name, product, amount, total_price, step_name, note
+        SELECT
+            rowid AS id,
+            order_id, date, customer_name, product, amount, total_price,
+            step_name, note, status, rejected_at
         FROM order_list
         WHERE 1=1
     """
     params = []
+
+    if show != "rejected":
+        base_sql += " AND (status IS NULL OR status != 'rejected')"
 
     if q:
         like = f"%{q}%"
@@ -203,17 +239,25 @@ def manager_orders():
 
     conn.close()
 
-    return render_template("manager/orders.html", orders=orders, q=q, step=step, steps=steps)
+    return render_template(
+        "manager/orders.html",
+        orders=orders, q=q, step=step, steps=steps, show=show
+    )
 
 
 @manager_bp.route("/orders/<order_id>", methods=["GET"])
 @manager_required
 def manager_order_detail(order_id):
     conn = get_order_mgmt_db()
+    ensure_order_list_schema(conn)
     cur = conn.cursor()
+
     cur.execute(
         """
-        SELECT rowid AS id, order_id, date, customer_name, product, amount, total_price, step_name, note
+        SELECT
+            rowid AS id,
+            order_id, date, customer_name, product, amount, total_price,
+            step_name, note, status, rejected_at
         FROM order_list
         WHERE order_id = ?
         """,
@@ -224,18 +268,52 @@ def manager_order_detail(order_id):
     return render_template("manager/order_detail.html", order=order)
 
 
-# ✅ 刪單
+# ✅ 刪單（改為：拒絕訂單/保留紀錄）
 @manager_bp.route("/orders/<order_id>/delete", methods=["POST"])
 @manager_required
 def manager_order_delete(order_id):
+    reason = (request.form.get("reason") or "").strip()
+    if not reason:
+        flash("❌ 請選擇刪除/拒絕原因", "danger")
+        return redirect(url_for("manager.manager_orders"))
+
+    note_text = f"你的訂單已被工廠拒絕：{reason}"
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     conn = get_order_mgmt_db()
+    ensure_order_list_schema(conn)
     cur = conn.cursor()
-    cur.execute("DELETE FROM order_list WHERE order_id = ?", (order_id,))
+
+    cur.execute(
+        """
+        UPDATE order_list
+        SET status = 'rejected',
+            note = ?,
+            rejected_at = ?
+        WHERE order_id = ?
+        """,
+        (note_text, now_str, order_id),
+    )
     conn.commit()
     conn.close()
 
-    flash("✅ 已刪除訂單", "success")
-    return redirect(url_for("manager.manager_orders"))
+    # ✅ 保留原查詢條件（如果你 orders.html 有 hidden inputs）
+    q = (request.form.get("q") or "").strip()
+    step = (request.form.get("step") or "").strip()
+    show = (request.form.get("show") or "").strip()
+
+    kwargs = {}
+    if q:
+        kwargs["q"] = q
+    if step:
+        kwargs["step"] = step
+    if show:
+        kwargs["show"] = show
+
+    flash("✅ 已拒絕訂單（保留紀錄）", "success")
+    return redirect(url_for("manager.manager_orders", **kwargs))
+
+
 
 
 

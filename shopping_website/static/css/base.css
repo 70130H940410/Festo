@@ -560,3 +560,279 @@ tr:hover td {
   /* H → A1/A2（回到中央） */
   100% { transform: translate(330px, 120px); }
 }
+
+/* ===== User Orders History ===== */
+
+.page-title{
+  margin-bottom: 0.35rem;
+}
+
+.table-user-orders{
+  table-layout: fixed;
+  min-width: 900px;
+}
+
+.table-user-orders th:nth-child(1), .table-user-orders td:nth-child(1){ width: 190px; } /* 訂單編號 */
+.table-user-orders th:nth-child(2), .table-user-orders td:nth-child(2){ width: 170px; } /* 時間 */
+.table-user-orders th:nth-child(4), .table-user-orders td:nth-child(4){ width: 80px; }  /* 數量 */
+.table-user-orders th:nth-child(5), .table-user-orders td:nth-child(5){ width: 90px; }  /* 總價 */
+.table-user-orders th:nth-child(6), .table-user-orders td:nth-child(6){ width: 110px; } /* 狀態 */
+.table-user-orders th:nth-child(7), .table-user-orders td:nth-child(7){ width: 260px; } /* 備註 */
+
+/* 訂單編號等寬更像系統 */
+.mono{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.9rem;
+}
+
+/* 商品欄允許換行 */
+.cell-wrap{
+  white-space: normal !important;
+  line-height: 1.35;
+}
+
+/* 備註避免一字一行：預設單行省略，滑到也不會爆版 */
+.cell-note{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 被拒絕那列淡紅提示 */
+.row-rejected{
+  background: rgba(220, 53, 69, 0.06);
+}
+
+/* badge 樣式 */
+.badge{
+  display: inline-block;
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.2;
+  border: 1px solid rgba(0,0,0,0.08);
+}
+
+.badge-success{
+  background: rgba(25, 135, 84, 0.12);
+  color: #198754;
+}
+
+.badge-danger{
+  background: rgba(220, 53, 69, 0.12);
+  color: #dc3545;
+}
+
+/* ===== Manager Orders Table ===== */
+
+.table-wrap {
+  overflow-x: auto;
+  border-radius: var(--radius);
+}
+
+.table-orders {
+  table-layout: fixed;
+  min-width: 1050px;
+}
+
+/* 讓表格內容不要一直把每列撐到超高 */
+.table-orders td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+/* 產品、製程狀態允許換行（不然會太擠） */
+.table-orders td:nth-child(5),
+.table-orders td:nth-child(8) {
+  white-space: normal;
+}
+
+/* 製程狀態：等寬字更好讀 */
+.table-orders td:nth-child(8) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* 備註不要變一字一行（你現在看到的「無/備/註」） */
+.table-orders td:nth-child(10) {
+  white-space: nowrap !important;
+  width: 220px;
+}
+
+/* ✅ 關鍵：把 table 裡面的 form 取消「卡片 form」效果
+   因為 base.css 全站 form 有背景/陰影/內距:contentReference[oaicite:1]{index=1} */
+.table-orders form {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+}
+
+/* 操作欄更整齊 */
+.table-orders td:nth-child(11) select,
+.table-orders td:nth-child(11) button {
+  width: 190px;
+  max-width: 100%;
+}
+
+.table-orders td:nth-child(11) button {
+  margin-top: 0.35rem;
+}
+
+
+
+/* ===== Manager Orders Table (fix tall rows) ===== */
+.table-orders{
+  table-layout: fixed;
+  width: 100%;
+  min-width: 1100px;
+}
+
+.table-orders th,
+.table-orders td{
+  vertical-align: middle;
+}
+
+/* 大多欄位：單行省略 */
+.table-orders td{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ✅ 產品欄：給更大的寬度 + 正常換行（不要一個字一行） */
+.table-orders th:nth-child(5),
+.table-orders td:nth-child(5){
+  width: 360px;
+  white-space: normal;
+  word-break: break-word;     /* 英文長字可斷 */
+  line-height: 1.35;
+}
+
+/* ✅ 製程狀態：允許換行 + 等寬字 */
+.table-orders th:nth-child(8),
+.table-orders td:nth-child(8){
+  width: 220px;
+  white-space: normal;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* 狀態 */
+.table-orders th:nth-child(9),
+.table-orders td:nth-child(9){
+  width: 90px;
+}
+
+/* 備註：不要直排 */
+.table-orders th:nth-child(10),
+.table-orders td:nth-child(10){
+  width: 160px;
+  white-space: nowrap !important;
+}
+
+/* 操作欄固定寬 */
+.table-orders th:nth-child(11),
+.table-orders td:nth-child(11){
+  width: 230px;
+}
+
+/* ✅ 表格內 form 不要卡片化 */
+.table-orders form{
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+}
+
+/* 操作欄元件整齊 */
+.table-orders td:nth-child(11) select,
+.table-orders td:nth-child(11) button{
+  width: 190px;
+  max-width: 100%;
+}
+.table-orders td:nth-child(11) button{
+  margin-top: 0.35rem;
+}
+
+/* 訂單ID 看起來更像系統 */
+.table-orders td:nth-child(2){
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.9rem;
+}
+
+
+/* ===== FIX: Manager Orders header overlap ===== */
+
+.table-wrap{
+  overflow-x: auto;
+}
+
+/* ✅ 改成 auto：讓欄寬依內容自然分配，不會把表頭擠成直排 */
+.table-orders{
+  table-layout: auto !important;
+  width: 100%;
+  min-width: 1200px; /* 讓橫向捲軸出現也沒關係，但表頭不會爛 */
+}
+
+/* 表頭：不要換行、不要直排疊字 */
+.table-orders thead th{
+  white-space: nowrap !important;
+  word-break: normal !important;
+  overflow: visible !important;
+}
+
+/* 一般儲存格：預設單行省略 */
+.table-orders td{
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+/* ✅ 指定每欄「最小寬度」：避免表頭被壓縮 */
+.table-orders th:nth-child(1), .table-orders td:nth-child(1){ min-width: 70px; }   /* ID */
+.table-orders th:nth-child(2), .table-orders td:nth-child(2){ min-width: 170px; }  /* 訂單ID */
+.table-orders th:nth-child(3), .table-orders td:nth-child(3){ min-width: 150px; }  /* 時間 */
+.table-orders th:nth-child(4), .table-orders td:nth-child(4){ min-width: 90px; }   /* 客戶 */
+.table-orders th:nth-child(5), .table-orders td:nth-child(5){ min-width: 360px; }  /* 產品 */
+.table-orders th:nth-child(6), .table-orders td:nth-child(6){ min-width: 70px; }   /* 數量 */
+.table-orders th:nth-child(7), .table-orders td:nth-child(7){ min-width: 80px; }   /* 總價 */
+.table-orders th:nth-child(8), .table-orders td:nth-child(8){ min-width: 230px; }  /* 製程狀態 */
+.table-orders th:nth-child(9), .table-orders td:nth-child(9){ min-width: 90px; }   /* 狀態 */
+.table-orders th:nth-child(10),.table-orders td:nth-child(10){ min-width: 140px; } /* 備註 */
+.table-orders th:nth-child(11),.table-orders td:nth-child(11){ min-width: 230px; } /* 操作 */
+
+/* 產品欄：允許換行（但不是一字一行） */
+.table-orders td:nth-child(5){
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.35;
+}
+
+/* 製程狀態：允許換行 + 等寬字 */
+.table-orders td:nth-child(8){
+  white-space: normal;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* 表格內 form 不要卡片化 */
+.table-orders form{
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+}
