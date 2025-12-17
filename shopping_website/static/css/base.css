@@ -836,3 +836,170 @@ tr:hover td {
   margin: 0 !important;
   border-radius: 0 !important;
 }
+
+
+/* ===== User orders: 操作欄更緊湊好看 ===== */
+
+/* 操作欄固定寬，避免太擠 */
+.table-user-orders th:last-child,
+.table-user-orders td:last-child{
+  width: 220px;
+}
+
+/* 只影響 user orders 的操作表單 */
+.table-user-orders td:last-child form{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+
+/* 下拉選單更精緻 */
+.table-user-orders td:last-child select{
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,0.12);
+  background: #fff;
+}
+
+/* 按鈕縮小一點、更像系統按鈕 */
+.table-user-orders td:last-child .btn{
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-weight: 800;
+}
+
+/* 取消按鈕不要太「炸」 */
+.table-user-orders td:last-child .btn-danger{
+  opacity: 0.95;
+}
+.table-user-orders td:last-child .btn-danger:hover{
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+/* 取消按鈕點了才需要注意：active row hover 更清楚 */
+.table-user-orders tbody tr:hover{
+  background: rgba(0, 123, 255, 0.04);
+}
+
+
+/* ===== User orders: 操作欄水平排列（按鈕左、下拉右） ===== */
+
+.table-user-orders td.cell-actions{
+  width: 260px;
+}
+
+.table-user-orders .actions-row{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  /* 取消 base.css 對 form 的卡片樣式（保險） */
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+}
+
+.table-user-orders .btn-cancel{
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.table-user-orders .select-reason{
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,0.12);
+  background: #fff;
+  flex: 1;              /* ✅ 下拉吃剩下空間 */
+  min-width: 150px;
+}
+
+
+/* ===== Global Modal ===== */
+.app-modal-backdrop{
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 20, 30, 0.45);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  z-index: 9999;
+}
+
+.app-modal-backdrop.is-open{
+  display: flex;
+}
+
+.app-modal{
+  width: min(520px, 96vw);
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 24px 70px rgba(0,0,0,0.25);
+  overflow: hidden;
+  transform: translateY(8px);
+  animation: modalIn 160ms ease-out forwards;
+}
+
+@keyframes modalIn{
+  to { transform: translateY(0); }
+}
+
+.app-modal__header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+}
+
+.app-modal__title{
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.app-modal__close{
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.06);
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.app-modal__body{
+  padding: 16px 18px;
+  color: rgba(0,0,0,0.78);
+  line-height: 1.6;
+  font-size: 0.98rem;
+  white-space: pre-wrap;
+}
+
+.app-modal__actions{
+  padding: 14px 18px 18px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* 如果你沒定義 btn-primary，補一個漂亮的 */
+.btn-primary{
+  background: #0d6efd;
+  border: 1px solid rgba(0,0,0,0.08);
+  color: #fff;
+}
+.btn-primary:hover{
+  filter: brightness(0.96);
+}
+

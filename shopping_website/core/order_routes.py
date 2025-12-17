@@ -1,9 +1,20 @@
 # core/order_routes.py
-# 負責「我要下單」與「製程規劃」頁面
+# 負責「我要下單」與「製程規劃」頁面 + 使用者訂單紀錄/取消訂單
 
-from flask import Blueprint, render_template, request, redirect, url_for, session, jsonify
+from flask import (
+    Blueprint,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    session,
+    jsonify,
+    flash,
+    abort,
+)
 from datetime import datetime
 import time
+
 from . import login_required
 from .db import get_product_db, get_order_mgmt_db
 
@@ -15,7 +26,7 @@ order_bp = Blueprint("order", __name__)
 # -----------------------------
 def ensure_order_list_schema(conn):
     """
-    確保 order_list 有 status / rejected_at 欄位（沒有就自動補上）
+    確保 order_list 有 status / rejected_at / cancelled_at 欄位（沒有就自動補上）
     """
     cur = conn.cursor()
     try:
@@ -30,9 +41,14 @@ def ensure_order_list_schema(conn):
             cur.execute("ALTER TABLE order_list ADD COLUMN rejected_at TEXT")
             changed = True
 
+        if "cancelled_at" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN cancelled_at TEXT")
+            changed = True
+
         if changed:
             conn.commit()
     except Exception:
+        # 不要讓 migration 影響頁面（表不存在等狀況）
         pass
 
 
@@ -63,6 +79,7 @@ def order_page():
     rows = cur.fetchall()
     conn.close()
 
+    # 把資料整理成給模板用的格式
     products = [
         {
             "id": row["id"],
@@ -85,6 +102,7 @@ def order_page():
             if qty_str == "" or qty_str == "0":
                 continue
 
+            # 檢查數量是否為整數
             try:
                 qty = int(qty_str)
             except ValueError:
@@ -112,6 +130,7 @@ def order_page():
             if not selected_items:
                 error_message = "請至少選擇一項產品。"
             else:
+                # 將本次選的產品與數量暫存在 session，給製程規劃頁使用
                 session["current_order_items"] = selected_items
                 return redirect(url_for("order.process_plan"))
 
@@ -130,23 +149,25 @@ def process_plan():
     - 從 session["current_order_items"] 讀取本次訂單摘要
     - 若 session 沒東西，退回 demo 資料（避免直接輸入網址爆掉）
     """
+    # 1. 從資料庫讀取製程步驟
     conn = get_product_db()
     cur = conn.cursor()
     cur.execute(
         """
-        SELECT 
-            step_order, 
-            step_name, 
-            station, 
-            description, 
-            estimated_time_sec 
-        FROM standard_process 
+        SELECT
+            step_order,
+            step_name,
+            station,
+            description,
+            estimated_time_sec
+        FROM standard_process
         ORDER BY step_order ASC
         """
     )
     rows = cur.fetchall()
     conn.close()
 
+    # 將資料庫 Row 物件轉為字典列表，傳給前端
     standard_steps = [
         {
             "step_order": row["step_order"],
@@ -158,11 +179,10 @@ def process_plan():
         for row in rows
     ]
 
+    # 2. 讀取 Session 中的訂單摘要
     order_items_summary = session.get("current_order_items")
     if not order_items_summary:
-        order_items_summary = [
-            {"name": "(無訂單資料 - 僅供預覽)", "quantity": 0},
-        ]
+        order_items_summary = [{"name": "(無訂單資料 - 僅供預覽)", "quantity": 0}]
 
     return render_template(
         "order/process_plan.html",
@@ -223,16 +243,20 @@ def submit_order_api():
 
         conn_prod = get_product_db()
         conn_order = get_order_mgmt_db()
-        ensure_order_list_schema(conn_order)  # ✅ 先補欄位（status/rejected_at）
+        ensure_order_list_schema(conn_order)  # ✅ 先補欄位（status/rejected_at/cancelled_at）
 
         cur_prod = conn_prod.cursor()
         cur_order = conn_order.cursor()
 
+        # --- 重新計算總價並確認庫存充足 ---
         total_price = 0
         product_names = []
 
         for item in cart_items:
-            cur_prod.execute("SELECT name, base_price, stock FROM products WHERE id = ?", (item["id"],))
+            cur_prod.execute(
+                "SELECT name, base_price, stock FROM products WHERE id = ?",
+                (item["id"],),
+            )
             prod_row = cur_prod.fetchone()
 
             if not prod_row:
@@ -247,6 +271,7 @@ def submit_order_api():
 
             product_names.append(f"{prod_row['name']} x {item['quantity']}")
 
+            # 扣庫存（尚未 commit 前不會真的生效）
             cur_prod.execute(
                 "UPDATE products SET stock = stock - ? WHERE id = ?",
                 (item["quantity"], item["id"]),
@@ -264,13 +289,13 @@ def submit_order_api():
 
         sql_order = """
             INSERT INTO order_list (
-                order_id, 
-                date, 
-                customer_name, 
-                product, 
-                amount, 
-                total_price, 
-                step_name, 
+                order_id,
+                date,
+                customer_name,
+                product,
+                amount,
+                total_price,
+                step_name,
                 note
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """
@@ -309,6 +334,7 @@ def submit_order_api():
             conn_order.rollback()
         print(f"Error during submit_order: {str(e)}")
         return jsonify({"success": False, "message": f"下單失敗: {str(e)}"}), 500
+
     finally:
         if conn_prod:
             conn_prod.close()
@@ -322,17 +348,20 @@ def submit_order_api():
 @order_bp.route("/orders", methods=["GET"])
 @login_required
 def order_history():
+    """
+    使用者查看自己的訂單紀錄：
+    - 依照 submit_order_api 寫入的 customer_name (session["account"]) 來查
+    """
     customer_name = session.get("account", "Guest")
 
     conn = get_order_mgmt_db()
     ensure_order_list_schema(conn)  # ✅ 先補欄位再查
     cur = conn.cursor()
-
     cur.execute(
         """
         SELECT
             order_id, date, customer_name, product, amount, total_price,
-            step_name, note, status, rejected_at
+            step_name, note, status, rejected_at, cancelled_at
         FROM order_list
         WHERE customer_name = ?
         ORDER BY date DESC
@@ -343,3 +372,62 @@ def order_history():
     conn.close()
 
     return render_template("order/orders_history.html", orders=orders)
+
+
+# -----------------------------------------------------------
+#  6. 使用者：取消自己的訂單（需選原因，保留紀錄）
+# -----------------------------------------------------------
+@order_bp.route("/orders/<order_id>/cancel", methods=["POST"])
+@login_required
+def cancel_my_order(order_id):
+    reason = (request.form.get("reason") or "").strip()
+    if not reason:
+        flash("請選擇取消原因", "danger")
+        return redirect(url_for("order.order_history"))
+
+    customer_name = session.get("account", "Guest")
+
+    conn = get_order_mgmt_db()
+    ensure_order_list_schema(conn)
+    cur = conn.cursor()
+
+    cur.execute("SELECT customer_name, status FROM order_list WHERE order_id = ?", (order_id,))
+    row = cur.fetchone()
+
+    if not row:
+        conn.close()
+        flash("找不到該訂單", "danger")
+        return redirect(url_for("order.order_history"))
+
+    # ✅ 只能取消自己的訂單
+    if row["customer_name"] != customer_name:
+        conn.close()
+        abort(403)
+
+    status = (row["status"] or "active")
+
+    # ✅ 已拒絕/已取消不能再取消
+    if status in ("rejected", "cancelled"):
+        conn.close()
+        flash("此訂單目前無法取消（可能已被拒絕或已取消）", "warning")
+        return redirect(url_for("order.order_history"))
+
+    note_text = f"客戶取消：{reason}"
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    cur.execute(
+        """
+        UPDATE order_list
+        SET status = 'cancelled',
+            note = ?,
+            cancelled_at = ?
+        WHERE order_id = ? AND customer_name = ?
+        """,
+        (note_text, now_str, order_id, customer_name),
+    )
+
+    conn.commit()
+    conn.close()
+
+    flash("✅ 已取消訂單（已保留紀錄）", "success")
+    return redirect(url_for("order.order_history"))

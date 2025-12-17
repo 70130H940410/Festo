@@ -10,6 +10,7 @@
   <!-- Loader 樣式 -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/loader.css') }}">
 </head>
+
 <body data-page="{{ request.endpoint or '' }}">
   <!-- 首次進入首頁用 Loader -->
   <div id="page-loader">
@@ -32,19 +33,17 @@
   <!-- 主畫面 -->
   <header>
     <nav>
-      <!-- 左側導覽 -->
       <a href="{{ url_for('index') }}">首頁</a>
       <a href="{{ url_for('order.order_page') }}">我要下單</a>
       <a href="{{ url_for('auth.profile') }}">個人資料</a>
+      <a href="{{ url_for('order.order_history') }}">我的訂單</a>
 
-      <!-- ✅ 管理者後台（只有 admin 才顯示） -->
       {% if session.get('role') == 'admin' %}
         <a href="{{ url_for('manager.manager_inventory') }}">庫存管理</a>
         <a href="{{ url_for('manager.manager_process_templates') }}">製程模板管理</a>
         <a href="{{ url_for('manager.manager_orders') }}">訂單總覽</a>
       {% endif %}
 
-      <!-- 右側登入 / 登出 -->
       <span style="margin-left:auto; display:flex; gap:0.75rem; align-items:center;">
         {% if session.get('user_id') %}
           <span class="nav-user">👤 {{ session.get('account') }}</span>
@@ -64,11 +63,30 @@
     <small>智慧工廠遠端下單與製程模擬系統</small>
   </footer>
 
-  <!-- 首頁 Loader JS -->
+  <!-- ===== Global Modal (Confirm/Alert) ===== -->
+  <div id="appModalBackdrop" class="app-modal-backdrop" aria-hidden="true">
+    <div class="app-modal" role="dialog" aria-modal="true" aria-labelledby="appModalTitle">
+      <div class="app-modal__header">
+        <div id="appModalTitle" class="app-modal__title">確認</div>
+        <button type="button" class="app-modal__close" id="appModalClose" aria-label="Close">×</button>
+      </div>
+
+      <div class="app-modal__body" id="appModalBody"></div>
+
+      <div class="app-modal__actions">
+        <button type="button" class="btn btn-secondary" id="appModalCancel">取消</button>
+        <button type="button" class="btn btn-danger" id="appModalOk">確定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JS（順序：loader -> modal -> page scripts） -->
   <script src="{{ url_for('static', filename='js/loader.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/modal.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
+
 
 
 

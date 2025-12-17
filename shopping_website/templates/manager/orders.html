@@ -2,7 +2,7 @@
 {% block title %}訂單總覽{% endblock %}
 
 {% block content %}
-<h2>訂單總覽</h2>
+<h2 class="page-title">訂單總覽</h2>
 <p class="text-muted">
   管理者查看所有訂單（可搜尋、可依製程狀態篩選）。搜尋欄可輸入：訂單ID / 客戶 / 產品 / 備註 / ID(rowid)。
 </p>
@@ -25,10 +25,16 @@
     </div>
   </div>
 
-  <div class="mt-2">
+  <!-- ✅ 新增：顯示 rejected / cancelled -->
+  <div class="mt-2" style="display:flex; gap:18px; flex-wrap:wrap;">
     <label style="display:flex; align-items:center; gap:8px;">
-      <input type="checkbox" name="show" value="rejected" {% if show == "rejected" %}checked{% endif %}>
-      顯示已拒絕訂單（rejected）
+      <input type="checkbox" name="show_rejected" value="1" {% if show_rejected %}checked{% endif %}>
+      顯示已拒絕（rejected）
+    </label>
+
+    <label style="display:flex; align-items:center; gap:8px;">
+      <input type="checkbox" name="show_cancelled" value="1" {% if show_cancelled %}checked{% endif %}>
+      顯示客戶取消（cancelled）
     </label>
   </div>
 
@@ -38,7 +44,6 @@
   </div>
 </form>
 
-<!-- ✅ 新增：包一層 table-wrap + table 加 class -->
 <div class="table-wrap">
   <table class="table-orders">
     <thead>
@@ -60,11 +65,14 @@
     <tbody>
       {% if orders and orders|length > 0 %}
         {% for o in orders %}
-          {% set is_rejected = (o["status"] == "rejected") %}
-          <tr {% if is_rejected %}style="opacity:0.85;"{% endif %}>
+          {% set st = o["status"] %}
+          {% set is_rejected = (st == "rejected") %}
+          {% set is_cancelled = (st == "cancelled") %}
+
+          <tr {% if is_rejected %}style="opacity:0.9;"{% endif %}>
             <td>{{ o["id"] }}</td>
 
-            <td>
+            <td class="mono">
               <a href="{{ url_for('manager.manager_order_detail', order_id=o['order_id']) }}">
                 {{ o["order_id"] }}
               </a>
@@ -72,30 +80,34 @@
 
             <td>{{ o["date"] }}</td>
             <td>{{ o["customer_name"] }}</td>
-            <td>{{ o["product"] }}</td>
+            <td class="cell-wrap">{{ o["product"] }}</td>
             <td>{{ o["amount"] }}</td>
             <td>{{ o["total_price"] }}</td>
-            <td>{{ o["step_name"] }}</td>
+
+            <td class="cell-wrap">{{ o["step_name"] }}</td>
 
             <td>
               {% if is_rejected %}
-                <span class="text-danger"><b>rejected</b></span>
+                <span class="badge badge-danger">rejected</span>
+              {% elif is_cancelled %}
+                <span class="badge badge-muted">cancelled</span>
               {% else %}
-                <span class="text-success">active</span>
+                <span class="badge badge-success">active</span>
               {% endif %}
             </td>
 
-            <td>{{ o["note"] }}</td>
+            <td class="cell-note">{{ o["note"] }}</td>
 
             <td>
-              {% if not is_rejected %}
+              {% if (not is_rejected) and (not is_cancelled) %}
                 <form method="post"
                       action="{{ url_for('manager.manager_order_delete', order_id=o['order_id']) }}"
-                      onsubmit="return confirm('確定要拒絕/刪單 {{ o['order_id'] }} 嗎？此操作會保留紀錄，但會標記為 rejected。');">
+                      data-confirm="確定要拒絕/刪單 {{ o['order_id'] }} 嗎？此操作會保留紀錄，但會標記為 rejected。">
 
                   <input type="hidden" name="q" value="{{ q }}">
                   <input type="hidden" name="step" value="{{ step }}">
-                  <input type="hidden" name="show" value="{{ show }}">
+                  <input type="hidden" name="show_rejected" value="{{ '1' if show_rejected else '' }}">
+                  <input type="hidden" name="show_cancelled" value="{{ '1' if show_cancelled else '' }}">
 
                   <select name="reason" required>
                     <option value="" disabled selected>選擇拒絕原因</option>
