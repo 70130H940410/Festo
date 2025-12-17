@@ -3,13 +3,15 @@
 
 {% block content %}
 <h2>訂單總覽</h2>
-<p class="text-muted">管理者查看所有訂單（可搜尋、可依製程狀態篩選）。</p>
+<p class="text-muted">
+  管理者查看所有訂單（可搜尋、可依製程狀態篩選）。搜尋欄可輸入：訂單ID / 客戶 / 產品 / 備註 / ID(rowid)。
+</p>
 
 <form method="get">
   <div class="grid-2">
     <div>
-      <label>搜尋（訂單號 / 客戶 / 產品 / 備註）</label>
-      <input type="text" name="q" value="{{ q }}" placeholder="例如：A0001 / 蔡典儒 / Fuse / 急件">
+      <label>搜尋（訂單ID / 客戶 / 產品 / 備註 / ID）</label>
+      <input type="text" name="q" value="{{ q }}" placeholder="例如：3 / 20251217... / test_1 / Fuse / 急件">
     </div>
 
     <div>
@@ -29,45 +31,58 @@
   </div>
 </form>
 
-<div class="card">
-  <table>
-    <thead>
-      <tr>
-        <th>訂單ID</th>
-        <th>時間</th>
-        <th>客戶</th>
-        <th>產品</th>
-        <th>數量</th>
-        <th>總價</th>
-        <th>製程狀態</th>
-        <th>備註</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% if orders and orders|length > 0 %}
-        {% for o in orders %}
-          <tr>
-            <td>
-              <a href="{{ url_for('manager.manager_order_detail', order_id=o['order_id']) }}">
-                {{ o["order_id"] }}
-              </a>
-            </td>
-            <td>{{ o["date"] }}</td>
-            <td>{{ o["customer_name"] }}</td>
-            <td>{{ o["product"] }}</td>
-            <td>{{ o["amount"] }}</td>
-            <td>{{ o["total_price"] }}</td>
-            <td>{{ o["step_name"] }}</td>
-            <td>{{ o["note"] }}</td>
-          </tr>
-        {% endfor %}
-      {% else %}
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>訂單ID</th>
+      <th>時間</th>
+      <th>客戶</th>
+      <th>產品</th>
+      <th>數量</th>
+      <th>總價</th>
+      <th>製程狀態</th>
+      <th>備註</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+
+  <tbody>
+    {% if orders and orders|length > 0 %}
+      {% for o in orders %}
         <tr>
-          <td colspan="8" class="text-center text-muted">沒有符合條件的訂單</td>
+          <td>{{ o["id"] }}</td>
+
+          <td>
+            <a href="{{ url_for('manager.manager_order_detail', order_id=o['order_id']) }}">
+              {{ o["order_id"] }}
+            </a>
+          </td>
+
+          <td>{{ o["date"] }}</td>
+          <td>{{ o["customer_name"] }}</td>
+          <td>{{ o["product"] }}</td>
+          <td>{{ o["amount"] }}</td>
+          <td>{{ o["total_price"] }}</td>
+          <td>{{ o["step_name"] }}</td>
+          <td>{{ o["note"] }}</td>
+
+          <td>
+            <form method="post"
+                  action="{{ url_for('manager.manager_order_delete', order_id=o['order_id']) }}"
+                  onsubmit="return confirm('確定要刪除訂單 {{ o['order_id'] }} 嗎？此操作無法復原。');">
+              <button type="submit" class="btn btn-danger">刪除</button>
+            </form>
+          </td>
         </tr>
-      {% endif %}
-    </tbody>
-  </table>
-</div>
+      {% endfor %}
+    {% else %}
+      <tr>
+        <td colspan="10" class="text-center text-muted">沒有符合條件的訂單</td>
+      </tr>
+    {% endif %}
+  </tbody>
+</table>
 {% endblock %}
+
 

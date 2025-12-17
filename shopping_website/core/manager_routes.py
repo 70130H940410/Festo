@@ -1,6 +1,6 @@
 # shopping_website/core/manager_routes.py
 
-from flask import Blueprint, render_template, request
+from flask import Blueprint, render_template, request, redirect, url_for, flash
 from . import manager_required
 from .db import get_product_db, get_order_mgmt_db
 
@@ -8,18 +8,45 @@ manager_bp = Blueprint("manager", __name__, url_prefix="/manager")
 
 
 # -----------------------------
-# 庫存管理（保留原本頁面）
+# 庫存管理（新版：直接讀寫 products.stock）
 # -----------------------------
-@manager_bp.route("/inventory")
+@manager_bp.route("/inventory", methods=["GET", "POST"])
 @manager_required
 def manager_inventory():
-    return render_template("manager/inventory.html")
+    error_message = None
+    success_message = None
+
+    conn = get_product_db()
+    cur = conn.cursor()
+
+    if request.method == "POST":
+        try:
+            product_id = int(request.form.get("product_id", "0"))
+            new_stock = int(request.form.get("new_stock", "0"))
+            if new_stock < 0:
+                new_stock = 0
+
+            cur.execute("UPDATE products SET stock = ? WHERE id = ?", (new_stock, product_id))
+            conn.commit()
+            success_message = "✅ 庫存已更新"
+        except Exception as e:
+            conn.rollback()
+            error_message = f"❌ 更新失敗：{e}"
+
+    cur.execute("SELECT id, name, base_price, stock FROM products ORDER BY id ASC")
+    products = cur.fetchall()
+    conn.close()
+
+    return render_template(
+        "manager/inventory.html",
+        products=products,
+        error_message=error_message,
+        success_message=success_message,
+    )
 
 
 # -----------------------------
 # 製程模板管理（standard_process）
-# - 新增步驟
-# - 更新秒數（只更新真的變更的）
 # -----------------------------
 @manager_bp.route("/process-templates", methods=["GET", "POST"])
 @manager_required
@@ -33,7 +60,6 @@ def manager_process_templates():
     if request.method == "POST":
         action = request.form.get("action", "")
 
-        # ✅ 新增步驟
         if action == "add_step":
             try:
                 step_order = int(request.form.get("step_order", "").strip())
@@ -49,7 +75,6 @@ def manager_process_templates():
                 if estimated_time_sec < 0:
                     raise ValueError("estimated_time_sec 不可為負數")
 
-                # 避免 step_order 重複（你想允許重複就刪掉這段）
                 cur.execute("SELECT 1 FROM standard_process WHERE step_order = ?", (step_order,))
                 if cur.fetchone():
                     raise ValueError(f"step_order={step_order} 已存在，請換一個順序")
@@ -67,10 +92,8 @@ def manager_process_templates():
                 conn.rollback()
                 error_message = f"❌ 新增失敗：{e}"
 
-        # ✅ 批次更新秒數（只更新真的變更的）
         elif action == "bulk_update_time":
             try:
-                # 先抓 DB 目前的秒數作比對
                 cur.execute("SELECT id, estimated_time_sec FROM standard_process")
                 old_map = {str(r["id"]): int(r["estimated_time_sec"] or 0) for r in cur.fetchall()}
 
@@ -87,7 +110,6 @@ def manager_process_templates():
                     if new_sec < 0:
                         new_sec = 0
 
-                    # ✅ 只有不同才 UPDATE
                     if new_sec != old_map[row_id]:
                         cur.execute(
                             "UPDATE standard_process SET estimated_time_sec = ? WHERE id = ?",
@@ -101,7 +123,6 @@ def manager_process_templates():
                 conn.rollback()
                 error_message = f"❌ 更新失敗：{e}"
 
-    # 每次都重新抓最新資料
     cur.execute(
         """
         SELECT id, step_order, step_name, station, description, estimated_time_sec
@@ -121,7 +142,7 @@ def manager_process_templates():
 
 
 # -----------------------------
-# 訂單總覽（order_management.db / order_list）
+# 訂單總覽（支援用 rowid 當作 id 搜尋）
 # -----------------------------
 @manager_bp.route("/orders", methods=["GET"])
 @manager_required
@@ -132,8 +153,8 @@ def manager_orders():
     conn = get_order_mgmt_db()
     cur = conn.cursor()
 
-    sql = """
-        SELECT order_id, date, customer_name, product, amount, total_price, step_name, note
+    base_sql = """
+        SELECT rowid AS id, order_id, date, customer_name, product, amount, total_price, step_name, note
         FROM order_list
         WHERE 1=1
     """
@@ -141,19 +162,37 @@ def manager_orders():
 
     if q:
         like = f"%{q}%"
-        sql += " AND (order_id LIKE ? OR customer_name LIKE ? OR product LIKE ? OR note LIKE ?)"
-        params += [like, like, like, like]
+        if q.isdigit():
+            base_sql += """
+              AND (
+                rowid = ?
+                OR order_id LIKE ?
+                OR customer_name LIKE ?
+                OR product LIKE ?
+                OR note LIKE ?
+              )
+            """
+            params += [int(q), like, like, like, like]
+        else:
+            base_sql += """
+              AND (
+                order_id LIKE ?
+                OR customer_name LIKE ?
+                OR product LIKE ?
+                OR note LIKE ?
+              )
+            """
+            params += [like, like, like, like]
 
     if step:
-        sql += " AND step_name = ?"
+        base_sql += " AND step_name = ?"
         params.append(step)
 
-    sql += " ORDER BY date DESC"
+    base_sql += " ORDER BY date DESC"
 
-    cur.execute(sql, params)
+    cur.execute(base_sql, params)
     orders = cur.fetchall()
 
-    # 下拉選單用：所有 step_name
     cur.execute("""
         SELECT DISTINCT step_name
         FROM order_list
@@ -172,19 +211,32 @@ def manager_orders():
 def manager_order_detail(order_id):
     conn = get_order_mgmt_db()
     cur = conn.cursor()
-
     cur.execute(
         """
-        SELECT order_id, date, customer_name, product, amount, total_price, step_name, note
+        SELECT rowid AS id, order_id, date, customer_name, product, amount, total_price, step_name, note
         FROM order_list
         WHERE order_id = ?
         """,
         (order_id,),
     )
     order = cur.fetchone()
-
     conn.close()
     return render_template("manager/order_detail.html", order=order)
+
+
+# ✅ 刪單
+@manager_bp.route("/orders/<order_id>/delete", methods=["POST"])
+@manager_required
+def manager_order_delete(order_id):
+    conn = get_order_mgmt_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM order_list WHERE order_id = ?", (order_id,))
+    conn.commit()
+    conn.close()
+
+    flash("✅ 已刪除訂單", "success")
+    return redirect(url_for("manager.manager_orders"))
+
 
 
 
