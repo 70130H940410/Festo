@@ -56,19 +56,17 @@ def login():
             user = cur.fetchone()
             conn.close()
 
-            if not user:
-                error_message = "找不到對應的帳號 / Email。"
-            else:
-                if not check_password_hash(user["password_hash"], password):
-                    error_message = "密碼錯誤，請再試一次。"
-                else:
-                    # 登入成功
-                    session.clear()
-                    session["user_id"] = user["id"]
-                    session["account"] = user["account"]
-                    session["role"] = user["role"]
+            if user and check_password_hash(user["password_hash"], password):
+                # 登入成功
+                session.clear()
+                session["user_id"] = user["id"]
+                session["account"] = user["account"]
+                session["role"] = user["role"]
 
-                    return redirect(url_for("order.order_page"))
+                return redirect(url_for("order.order_page"))
+            else:
+                # 登入失敗 (帳號不存在 或 密碼錯誤)
+                error_message = "帳號或密碼錯誤，請再試一次。"
 
     return render_template("auth/login.html", error_message=error_message)
 
