@@ -25,64 +25,105 @@
     </div>
   </div>
 
+  <div class="mt-2">
+    <label style="display:flex; align-items:center; gap:8px;">
+      <input type="checkbox" name="show" value="rejected" {% if show == "rejected" %}checked{% endif %}>
+      顯示已拒絕訂單（rejected）
+    </label>
+  </div>
+
   <div class="mt-2 text-right">
     <button type="submit">查詢</button>
     <a class="btn btn-secondary" href="{{ url_for('manager.manager_orders') }}">清除</a>
   </div>
 </form>
 
-<table>
-  <thead>
-    <tr>
-      <th>ID</th>
-      <th>訂單ID</th>
-      <th>時間</th>
-      <th>客戶</th>
-      <th>產品</th>
-      <th>數量</th>
-      <th>總價</th>
-      <th>製程狀態</th>
-      <th>備註</th>
-      <th>操作</th>
-    </tr>
-  </thead>
-
-  <tbody>
-    {% if orders and orders|length > 0 %}
-      {% for o in orders %}
-        <tr>
-          <td>{{ o["id"] }}</td>
-
-          <td>
-            <a href="{{ url_for('manager.manager_order_detail', order_id=o['order_id']) }}">
-              {{ o["order_id"] }}
-            </a>
-          </td>
-
-          <td>{{ o["date"] }}</td>
-          <td>{{ o["customer_name"] }}</td>
-          <td>{{ o["product"] }}</td>
-          <td>{{ o["amount"] }}</td>
-          <td>{{ o["total_price"] }}</td>
-          <td>{{ o["step_name"] }}</td>
-          <td>{{ o["note"] }}</td>
-
-          <td>
-            <form method="post"
-                  action="{{ url_for('manager.manager_order_delete', order_id=o['order_id']) }}"
-                  onsubmit="return confirm('確定要刪除訂單 {{ o['order_id'] }} 嗎？此操作無法復原。');">
-              <button type="submit" class="btn btn-danger">刪除</button>
-            </form>
-          </td>
-        </tr>
-      {% endfor %}
-    {% else %}
+<!-- ✅ 新增：包一層 table-wrap + table 加 class -->
+<div class="table-wrap">
+  <table class="table-orders">
+    <thead>
       <tr>
-        <td colspan="10" class="text-center text-muted">沒有符合條件的訂單</td>
+        <th>ID</th>
+        <th>訂單ID</th>
+        <th>時間</th>
+        <th>客戶</th>
+        <th>產品</th>
+        <th>數量</th>
+        <th>總價</th>
+        <th>製程狀態</th>
+        <th>狀態</th>
+        <th>備註</th>
+        <th>操作</th>
       </tr>
-    {% endif %}
-  </tbody>
-</table>
+    </thead>
+
+    <tbody>
+      {% if orders and orders|length > 0 %}
+        {% for o in orders %}
+          {% set is_rejected = (o["status"] == "rejected") %}
+          <tr {% if is_rejected %}style="opacity:0.85;"{% endif %}>
+            <td>{{ o["id"] }}</td>
+
+            <td>
+              <a href="{{ url_for('manager.manager_order_detail', order_id=o['order_id']) }}">
+                {{ o["order_id"] }}
+              </a>
+            </td>
+
+            <td>{{ o["date"] }}</td>
+            <td>{{ o["customer_name"] }}</td>
+            <td>{{ o["product"] }}</td>
+            <td>{{ o["amount"] }}</td>
+            <td>{{ o["total_price"] }}</td>
+            <td>{{ o["step_name"] }}</td>
+
+            <td>
+              {% if is_rejected %}
+                <span class="text-danger"><b>rejected</b></span>
+              {% else %}
+                <span class="text-success">active</span>
+              {% endif %}
+            </td>
+
+            <td>{{ o["note"] }}</td>
+
+            <td>
+              {% if not is_rejected %}
+                <form method="post"
+                      action="{{ url_for('manager.manager_order_delete', order_id=o['order_id']) }}"
+                      onsubmit="return confirm('確定要拒絕/刪單 {{ o['order_id'] }} 嗎？此操作會保留紀錄，但會標記為 rejected。');">
+
+                  <input type="hidden" name="q" value="{{ q }}">
+                  <input type="hidden" name="step" value="{{ step }}">
+                  <input type="hidden" name="show" value="{{ show }}">
+
+                  <select name="reason" required>
+                    <option value="" disabled selected>選擇拒絕原因</option>
+                    <option value="庫存不足">庫存不足</option>
+                    <option value="付款狀態異常">付款狀態異常</option>
+                    <option value="資料不完整（收件資訊缺漏）">資料不完整（收件資訊缺漏）</option>
+                    <option value="超出工廠當日產能">超出工廠當日產能</option>
+                    <option value="其他原因（請聯絡客服）">其他原因（請聯絡客服）</option>
+                  </select>
+
+                  <button type="submit" class="btn btn-danger">拒絕/刪單</button>
+                </form>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      {% else %}
+        <tr>
+          <td colspan="11" class="text-center text-muted">沒有符合條件的訂單</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
 {% endblock %}
+
+
 
 
