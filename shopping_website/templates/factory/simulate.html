@@ -1,248 +1,184 @@
+{# templates/factory/simulate.html #}
 {% extends "base.html" %}
 
-{% block title %}工廠運作模擬 (Demo) - 智慧工廠下單系統{% endblock %}
+{% block title %}工廠運作模擬 (Demo){% endblock %}
 
 {% block content %}
-<h2>工廠運作模擬 (Demo)</h2>
-<p class="text-muted">
-  這個頁面示意國立中央大學 Festo 智慧工廠（CP-Factory）中，托盤沿著各站點
-  A1 → B → C → D → E → F → G → H → A2 的標準生產流程。未來可以改成由 PLC / MES
-  回寫每個步驟狀態與當前站點，前端只要定期讀取資料庫或使用 WebSocket 即可更新畫面。
-</p>
+<div class="page-container">
 
-<!-- 訂單資訊 -->
-<div class="card">
-  <h3>訂單資訊</h3>
-  <p class="text-muted">
-    以下為示意資料，未來會連動實際的訂單編號與下單人資訊。
+  <h1 class="page-title">工廠運作模擬 (Demo)</h1>
+
+  <p class="text-muted" style="margin-bottom: 1rem;">
+    這個頁面示意訂單在 Festo 智慧工廠（CP-Factory）中，
+    托盤沿著各站點（A1 → B → C → D → E → F → G → H → A2）依序加工的流程。
+    目前由後端排程器模擬，狀態會從資料庫即時更新。
   </p>
 
-  <table>
-    <tbody>
-      <tr>
-        <th style="width: 140px;">訂單編號</th>
-        <td>#1</td>
-      </tr>
-      <tr>
-        <th>下單人</th>
-        <td>Demo User</td>
-      </tr>
-      <tr>
-        <th>目前狀態</th>
-        <td>
-          <span class="badge badge-info">產線進行中…</span>
-        </td>
-      </tr>
-    </tbody>
-  </table>
-</div>
+  <!-- ===== 訂單資訊 Card ===== -->
+  <div class="card" style="margin-bottom: 1.25rem;">
+    <div class="card-header">
+      <h2 class="card-title">訂單資訊</h2>
+      <p class="text-muted" style="margin-top: .25rem;">
+        已從資料庫讀取：訂單編號／下單人／備註／狀態
+      </p>
+    </div>
 
-<!-- 製程步驟進度（對應 9 大站點） -->
-<div class="card">
-  <h3>製程步驟進度</h3>
-  <p class="text-muted">
-    綠色代表已完成、藍色代表目前進行中、灰色代表尚未開始。流程依照
-    A1 → B → C → D → E → F → G → H → A2 的順序進行。
-  </p>
+    <div class="card-body">
+      <table class="table table-striped" style="width: 100%;">
+        <tbody>
+          <tr>
+            <th style="width: 140px;">訂單編號</th>
+            <td>#{{ order_info.order_id | default(order_info.id) }}</td>
+          </tr>
 
-  <ul class="timeline">
-    <!-- Step 1 -->
-    <li class="timeline-item">
-      <div class="timeline-status status-finished"></div>
-      <div class="timeline-content">
-        <div class="timeline-header">
-          <strong>Step 1：A1 自動倉儲－放置零件（上蓋）</strong>
-          <span class="badge badge-success ml-1">已完成</span>
-        </div>
-        <div class="timeline-sub text-muted">
-          系統從自動倉儲中取出載有上蓋的托盤，放置到輸送帶上，流程啟動。
-        </div>
-      </div>
-    </li>
+          <tr>
+            <th>下單人</th>
+            <td>{{ order_info.user_name | default("Demo User") }}</td>
+          </tr>
 
-    <!-- Step 2 -->
-    <li class="timeline-item">
-      <div class="timeline-status status-finished"></div>
-      <div class="timeline-content">
-        <div class="timeline-header">
-          <strong>Step 2:B 量測－尺寸量測</strong>
-          <span class="badge badge-success ml-1">已完成</span>
-        </div>
-        <div class="timeline-sub text-muted">
-          工件被送往 B 站，雷射感測器量測上蓋高度或厚度，確認是否符合規格。
-        </div>
-      </div>
-    </li>
+          <tr>
+            <th>備註</th>
+            <td>{{ order_info.note | default("無備註") }}</td>
+          </tr>
 
-    <!-- Step 3 -->
-    <li class="timeline-item">
-      <div class="timeline-status status-running"></div>
-      <div class="timeline-content">
-        <div class="timeline-header">
-          <strong>Step 3:C 鑽孔－上蓋鑽孔</strong>
-          <span class="badge badge-primary ml-1">進行中…</span>
-        </div>
-        <div class="timeline-sub text-muted">
-          工件來到 C 站，鑽孔模組透過 X / Z 軸移動，在上蓋上鑽出所需孔位。
-        </div>
-      </div>
-    </li>
+          <tr>
+            <th>目前狀態</th>
+            <td>
+              {% set st = (order_info.status | default("in_progress")) %}
+              {% if st in ["in_progress", "running", "active"] %}
+                <span class="badge badge-info">產線進行中…</span>
+              {% elif st in ["done", "finished", "complete", "completed"] %}
+                <span class="badge badge-success">已完成</span>
+              {% elif st in ["rejected", "error", "failed"] %}
+                <span class="badge badge-danger">異常 / 已拒絕</span>
+              {% elif st in ["cancelled", "canceled"] %}
+                <span class="badge badge-secondary">已取消</span>
+              {% else %}
+                <span class="badge badge-secondary">{{ st }}</span>
+              {% endif %}
+            </td>
+          </tr>
 
-    <!-- Step 4 -->
-    <li class="timeline-item">
-      <div class="timeline-status status-pending"></div>
-      <div class="timeline-content">
-        <div class="timeline-header">
-          <strong>Step 4:D 機器人室－PCB 組裝</strong>
-          <span class="badge badge-secondary ml-1">尚未開始</span>
-        </div>
-        <div class="timeline-sub text-muted">
-          在機器人室，六軸工業機器人將 PCB 電路板放入上蓋，並安裝保險絲。
-        </div>
-      </div>
-    </li>
+          <tr>
+            <th>模擬狀態</th>
+            <td>
+              <span id="sim-status" class="text-muted">準備初始化…</span>
+            </td>
+          </tr>
 
-    <!-- Step 5 -->
-    <li class="timeline-item">
-      <div class="timeline-status status-pending"></div>
-      <div class="timeline-content">
-        <div class="timeline-header">
-          <strong>Step 5：E 視覺檢測－組裝檢驗</strong>
-          <span class="badge badge-secondary ml-1">尚未開始</span>
-        </div>
-        <div class="timeline-sub text-muted">
-          工業相機檢查保險絲是否安裝完整、位置與顏色是否正確，判定良品或不良品。
-        </div>
-      </div>
-    </li>
-
-    <!-- Step 6 -->
-    <li class="timeline-item">
-      <div class="timeline-status status-pending"></div>
-      <div class="timeline-content">
-        <div class="timeline-header">
-          <strong>Step 6：F 盒匣－放置下蓋</strong>
-          <span class="badge badge-secondary ml-1">尚未開始</span>
-        </div>
-        <div class="timeline-sub text-muted">
-          盒匣／堆疊模組將下蓋從彈匣中分離並放到托盤上，準備與上蓋結合。
-        </div>
-      </div>
-    </li>
-
-    <!-- Step 7 -->
-    <li class="timeline-item">
-      <div class="timeline-status status-pending"></div>
-      <div class="timeline-content">
-        <div class="timeline-header">
-          <strong>Step 7：G 氣壓壓製－上下蓋壓合</strong>
-          <span class="badge badge-secondary ml-1">尚未開始</span>
-        </div>
-        <div class="timeline-sub text-muted">
-          氣壓肌腱提供壓力，將上蓋與下蓋緊密壓合，完成外殼組裝。
-        </div>
-      </div>
-    </li>
-
-    <!-- Step 8 -->
-    <li class="timeline-item">
-      <div class="timeline-status status-pending"></div>
-      <div class="timeline-content">
-        <div class="timeline-header">
-          <strong>Step 8：H 烘烤加熱－膠合固化</strong>
-          <span class="badge badge-secondary ml-1">尚未開始</span>
-        </div>
-        <div class="timeline-sub text-muted">
-          工件經由下方迴流線進入烘烤加熱站，模擬通過烤箱進行熱處理或膠合固化。
-        </div>
-      </div>
-    </li>
-
-    <!-- Step 9 -->
-    <li class="timeline-item">
-      <div class="timeline-status status-pending"></div>
-      <div class="timeline-content">
-        <div class="timeline-header">
-          <strong>Step 9：A2 自動倉儲－存放成品</strong>
-          <span class="badge badge-secondary ml-1">尚未開始</span>
-        </div>
-        <div class="timeline-sub text-muted">
-          成品回到 A2，自動倉儲機器人將完成的產品放回貨架指定位置，結束整個生產循環。
-        </div>
-      </div>
-    </li>
-  </ul>
-</div>
-
-<!-- 產線搬運路徑動畫 Demo -->
-<div class="card">
-  <h3>產線搬運路徑動畫 (Demo)</h3>
-  <p class="text-muted">
-    下方以簡化平面圖示意：中央為自動倉儲 A1/A2，周圍透過 U 型輸送帶串起 D（機器人室）、
-    E（視覺檢測）、F（盒匣）、G（氣壓壓製）等站點。右側的 B（量測）／C（鑽孔）／H（烘烤）
-    則是一條與主線分開的支線，主要由移動式機器人 Robotino 負責搬運。
-    動畫中的小方塊代表 Robotino，示意其在 A1/A2 → B → C → H → 回到 A1/A2 之間往返運送工件。
-  </p>
-
-  <div class="line-legend text-muted">
-    <span class="legend-box legend-belt"></span> 輸送帶　
-    <span class="legend-box legend-station"></span> 站點　
-    <span class="legend-box legend-carrier"></span> 移動式機器人 (Robotino)
-  </div>
-
-  <div class="production-line">
-    <!-- 主輸送帶 -->
-    <div class="belt belt-main"></div>
-    <div class="belt belt-vertical"></div>
-    <div class="belt belt-left"></div>
-
-    <!-- 站點方塊 -->
-    <div class="station station-a1">A1<br><span>自動倉儲<br>(出料)</span></div>
-    <div class="station station-a2">A2<br><span>自動倉儲<br>(入庫)</span></div>
-    <div class="station station-b">B<br><span>量測</span></div>
-    <div class="station station-c">C<br><span>鑽孔</span></div>
-    <div class="station station-h">H<br><span>烘烤加熱</span></div>
-    <div class="station station-d">D<br><span>機器人室</span></div>
-    <div class="station station-e">E<br><span>視覺檢測</span></div>
-    <div class="station station-f">F<br><span>盒匣<br>(下蓋)</span></div>
-    <div class="station station-g">G<br><span>氣壓壓製</span></div>
-    <div class="station station-r">R<br><span>移動機器人</span></div>
-
-    <!-- 搬運中的「移動式機器人」 -->
-    <div class="carrier">
-      <div class="carrier-inner"></div>
+        </tbody>
+      </table>
     </div>
   </div>
-</div>
 
+  <!-- ===== 製程步驟進度 Card ===== -->
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">製程步驟進度</h2>
+      <p class="text-muted" style="margin-top: .25rem;">
+        綠色代表已完成、藍色代表目前進行中、灰色代表尚未開始。
+        （括號顯示：已完成件數 / 總件數）
+      </p>
+    </div>
 
-<!-- 下一步操作說明 -->
-<div class="card">
-  <h3>下一步操作</h3>
-  <p class="text-muted">
-    Demo 版本中，你可以：
-  </p>
-  <ul class="text-muted">
-    <li>搭配報告中的平面配置圖，說明 U 型產線佈局與站點功能。</li>
-    <li>示範如何將 MES / PLC 回傳的站點狀態，映射到時間軸與動畫上。</li>
-    <li>說明前端只要定期輪詢（polling）或用 WebSocket，就可以即時更新畫面。</li>
-  </ul>
+    <div class="card-body">
+      <ul class="timeline">
+        {% for s in steps %}
+          {# state 優先，其次才吃 status；若 DB 用 ACTIVE/DONE 也可映射 #}
+          {% set step_state = s.state | default(s.status) | default("pending") %}
+          {% if step_state not in ["pending", "running", "finished"] %}
+            {% if step_state in ["DONE", "done", "completed"] %}
+              {% set step_state = "finished" %}
+            {% elif step_state in ["ACTIVE", "active", "in_progress"] %}
+              {% set step_state = "running" %}
+            {% else %}
+              {% set step_state = "pending" %}
+            {% endif %}
+          {% endif %}
 
-  <div class="mt-2 text-right">
-    <a class="btn btn-secondary" href="{{ url_for('order.process_plan') }}">
-      返回製程規劃
-    </a>
-    <a class="btn" href="{{ url_for('order.order_page') }}">
-      返回我要下單
-    </a>
+          {# done/total：後端若沒給，也不會爆 #}
+          {% set done_qty = s.done_qty | default(0) %}
+          {% set total_qty = s.total_qty | default(order_info.amount | default(1)) %}
+
+          <li class="timeline-step {{ step_state }}">
+            <div style="display:flex; align-items:center; gap:.6rem; flex-wrap:wrap;">
+              <strong>
+                Step {{ s.step_order | default(loop.index) }}：
+                {{ s.step_name }}
+              </strong>
+
+              <span class="text-muted">
+                ({{ done_qty }}/{{ total_qty }})
+              </span>
+
+              {% if step_state == "finished" %}
+                <span class="badge badge-success">已完成</span>
+              {% elif step_state == "running" %}
+                <span class="badge badge-primary">進行中…</span>
+              {% else %}
+                <span class="badge badge-secondary">尚未開始</span>
+              {% endif %}
+            </div>
+
+            {% if s.station is defined and s.station %}
+              <div class="text-muted" style="margin-top:.25rem;">
+                <strong>站點：</strong>{{ s.station }}
+              </div>
+            {% endif %}
+
+            {% if s.description is defined and s.description %}
+              <div class="text-muted" style="margin-top:.25rem; line-height:1.5;">
+                {{ s.description }}
+              </div>
+            {% endif %}
+
+            {% if s.estimated_time_sec is defined and s.estimated_time_sec %}
+              <div class="text-muted" style="margin-top:.25rem;">
+                <strong>預估時間：</strong>{{ s.estimated_time_sec }} 秒 / 件
+              </div>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
   </div>
+
 </div>
+
+<script>
+  const ORDER_ID = "{{ order_info.order_id | default('') }}";
+  const statusEl = document.getElementById("sim-status");
+
+  async function getJson(url) {
+    const res = await fetch(url, { method: "GET", cache: "no-store" });
+    const text = await res.text();
+    try { return JSON.parse(text); }
+    catch(e) { console.log("API not JSON:", text); return null; }
+  }
+
+  async function initAndRun() {
+    if (!ORDER_ID) {
+      statusEl.textContent = "缺少 order_id（請用 ?order_id=... 開啟此頁）";
+      return;
+    }
+
+    statusEl.textContent = "初始化中…";
+    await getJson(`/factory/api/init/${ORDER_ID}`);
+
+    statusEl.textContent = "模擬進行中（每秒推進一次）…";
+
+    setInterval(async () => {
+      const r = await getJson(`/factory/api/tick`);
+      console.log("tick:", r);
+      window.location.reload();
+    }, 1000);
+  }
+
+  window.addEventListener("load", initAndRun);
+</script>
 {% endblock %}
 
-{% block scripts %}
-  {# 之後如果要做即時更新，可以在這裡加上 factory_simulate.js，實作 polling 或 WebSocket #}
-  {# <script src="{{ url_for('static', filename='js/factory_simulate.js') }}"></script> #}
-{% endblock %}
+
 
 
 
