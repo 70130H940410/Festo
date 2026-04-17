@@ -190,17 +190,23 @@ def _is_order_completed(order_db: sqlite3.Connection, order_id: str, last_step: 
     return int(r["c"] or 0) >= max(1, int(amount or 1))
 
 
-def _complete_due_jobs(order_db: sqlite3.Connection) -> None:
+def _complete_due_jobs(order_db: sqlite3.Connection) -> int:
     """把 busy_until 到點的 station 完成當前工作（running -> finished），並釋放 station。"""
     now = _now()
+    completed_count = 0
 
     running_stations = order_db.execute("""
-        SELECT station, current_order_id, current_piece_no, current_step_order, busy_until
+        SELECT station, current_order_id, current_piece_no, current_step_order, busy_until, IFNULL(is_error, 0) as is_error
         FROM station_state
-        WHERE current_order_id IS NOT NULL AND busy_until IS NOT NULL
+        WHERE current_order_id IS NOT NULL
     """).fetchall()
 
     for ss in running_stations:
+        if ss["is_error"] == 1:
+            # 凍結時間：如果機台故障，自動延長 busy_until，使其無法達到完成條件
+            order_db.execute("UPDATE station_state SET busy_until = datetime(busy_until, '+1 second') WHERE station = ?", (ss["station"],))
+            continue
+        
         try:
             end_dt = datetime.fromisoformat(str(ss["busy_until"]))
         except Exception:
@@ -223,8 +229,10 @@ def _complete_due_jobs(order_db: sqlite3.Connection) -> None:
             SET current_order_id=NULL, current_piece_no=NULL, current_step_order=NULL, busy_until=NULL, updated_at=?
             WHERE station=?
         """, (_fmt(now), ss["station"]))
+        completed_count += 1
 
     order_db.commit()
+    return completed_count
 
 
 def _dispatch_for_focus_order(order_db: sqlite3.Connection, product_db: sqlite3.Connection, focus_order_id: str) -> List[dict]:
@@ -265,11 +273,11 @@ def _dispatch_for_focus_order(order_db: sqlite3.Connection, product_db: sqlite3.
 
     _ensure_piece_rows(order_db, focus_order_id, chain, amount)
 
-    # idle stations
+    # idle stations (excluding those in error)
     idle = order_db.execute("""
         SELECT station
         FROM station_state
-        WHERE current_order_id IS NULL
+        WHERE current_order_id IS NULL AND IFNULL(is_error, 0) = 0
         ORDER BY station
     """).fetchall()
 
@@ -364,7 +372,7 @@ def _tick_once_for_order(order_db: sqlite3.Connection, product_db: sqlite3.Conne
     2) 只針對 focus_order_id 派工
     3) 若訂單最後一步全 finished -> 改 status=completed
     """
-    _complete_due_jobs(order_db)
+    completed_count = _complete_due_jobs(order_db)
 
     dispatched = _dispatch_for_focus_order(order_db, product_db, focus_order_id)
 
@@ -380,6 +388,11 @@ def _tick_once_for_order(order_db: sqlite3.Connection, product_db: sqlite3.Conne
             if _is_order_completed(order_db, focus_order_id, chain[-1], amount):
                 order_db.execute("UPDATE order_list SET status=? WHERE order_id=?", (_COMPLETE_STATUS, focus_order_id))
                 order_db.commit()
+
+    if completed_count > 0 or len(dispatched) > 0:
+        from core.sse import sse_manager
+        import json
+        sse_manager.announce(json.dumps({"order_id": focus_order_id}))
 
     return dispatched
 
@@ -476,6 +489,68 @@ def simulate():
         order_db.close()
         product_db.close()
 
+# -------------------------
+# API: status for SSE dynamic update
+# -------------------------
+@factory_bp.route("/api/order_status/<order_id>", methods=["GET"])
+@login_required
+def api_order_status(order_id: str):
+    order_db = _conn(_db_path(_ORDER_DB_FILENAME))
+    product_db = _conn(_db_path(_PRODUCT_DB_FILENAME))
+    try:
+        o = order_db.execute("""
+            SELECT order_id, customer_name, step_name, note, status, amount
+            FROM order_list
+            WHERE order_id=?
+        """, (order_id,)).fetchone()
+        if not o:
+            abort(404, "order not found")
+
+        chain = _parse_step_chain(o["step_name"] or "")
+        try:
+            amount = max(1, int(o["amount"] or 1))
+        except Exception:
+            amount = 1
+
+        steps = _get_step_defs(product_db, chain)
+        agg: Dict[int, Dict[str, int]] = {}
+        for step_no in chain:
+            done = order_db.execute("SELECT COUNT(*) AS c FROM piece_step_progress WHERE order_id=? AND step_order=? AND state='finished'", (order_id, step_no)).fetchone()["c"]
+            running = order_db.execute("SELECT COUNT(*) AS c FROM piece_step_progress WHERE order_id=? AND step_order=? AND state='running'", (order_id, step_no)).fetchone()["c"]
+            
+            # Check if assigned station is in error
+            err_c = 0
+            try:
+                err_c = order_db.execute("SELECT COUNT(*) AS c FROM station_state WHERE current_order_id=? AND current_step_order=? AND IFNULL(is_error,0)=1", (order_id, step_no)).fetchone()["c"]
+            except Exception:
+                pass
+                
+            agg[step_no] = {"done": int(done or 0), "running": int(running or 0), "error": int(err_c or 0)}
+
+        for s in steps:
+            step_no = int(s["step_order"])
+            done_qty = agg.get(step_no, {}).get("done", 0)
+            running_qty = agg.get(step_no, {}).get("running", 0)
+            error_qty = agg.get(step_no, {}).get("error", 0)
+            s["done_qty"] = done_qty
+            s["total_qty"] = amount
+            if done_qty >= amount:
+                s["state"] = "finished"
+            elif error_qty > 0:
+                s["state"] = "error"
+            elif running_qty > 0:
+                s["state"] = "running"
+            else:
+                s["state"] = "pending"
+
+        order_info = {
+            "order_id": o["order_id"],
+            "status": (o["status"] or "").lower(),
+        }
+        return jsonify({"order_info": order_info, "steps": steps})
+    finally:
+        order_db.close()
+        product_db.close()
 
 # -------------------------
 # API: init / reset / tick (GET/POST 都可)
@@ -586,4 +661,33 @@ def api_debug_state():
         return jsonify({"stations": stations, "running": running})
     finally:
         order_db.close()
+
+
+# -------------------------
+# Background Task Scheduler Function
+# -------------------------
+def _tick_all_active_orders(app):
+    """
+    背景執行緒專用：尋找所有狀態為 active 的訂單並推進進度
+    """
+    with app.app_context():
+        order_db = _conn(_db_path(_ORDER_DB_FILENAME))
+        product_db = _conn(_db_path(_PRODUCT_DB_FILENAME))
+        try:
+            _ensure_tables(order_db)
+            _ensure_station_rows(order_db, product_db)
+
+            # 確保完成時間到的任務先被標記完成
+            _complete_due_jobs(order_db)
+
+            # 找出所有處理中的訂單
+            active_orders = order_db.execute("SELECT order_id FROM order_list WHERE status='active'").fetchall()
+            for row in active_orders:
+                order_id = row["order_id"]
+                _tick_once_for_order(order_db, product_db, order_id)
+        except Exception as e:
+            print(f"[Factory Scheduler Error] {e}")
+        finally:
+            order_db.close()
+            product_db.close()
 

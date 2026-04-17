@@ -45,6 +45,10 @@ def ensure_order_list_schema(conn):
             cur.execute("ALTER TABLE order_list ADD COLUMN cancelled_at TEXT")
             changed = True
 
+        if "estimated_delivery" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN estimated_delivery TEXT")
+            changed = True
+
         if changed:
             conn.commit()
     except Exception:
@@ -262,26 +266,46 @@ def submit_order_api():
             if not prod_row:
                 raise Exception(f"找不到產品 ID: {item['id']}")
 
-            current_stock = prod_row["stock"]
-            if current_stock < item["quantity"]:
-                raise Exception(f"產品 {prod_row['name']} 庫存不足 (剩餘 {current_stock})，下單失敗")
+            # --- 原本檢查產品庫存，現改為檢查 BOM 原物料庫存 ---
+            cur_prod.execute("""
+                SELECT rm.id, rm.name, rm.stock, b.quantity_required 
+                FROM bom b 
+                JOIN raw_materials rm ON b.material_id = rm.id 
+                WHERE b.product_id = ?
+            """, (item["id"],))
+            bom_rows = cur_prod.fetchall()
+            
+            for rm in bom_rows:
+                required = rm["quantity_required"] * item["quantity"]
+                if rm["stock"] < required:
+                    raise Exception(f"原料 [{rm['name']}] 庫存不足 (需 {required}，剩餘 {rm['stock']})，無法生產產品 [{prod_row['name']}]")
+                
+                # 扣除原料庫存（尚未 commit 前不會真的生效）
+                cur_prod.execute("UPDATE raw_materials SET stock = stock - ? WHERE id = ?", (required, rm["id"]))
 
             price = prod_row["base_price"] if prod_row["base_price"] is not None else 0
             total_price += price * item["quantity"]
 
             product_names.append(f"{prod_row['name']} x {item['quantity']}")
 
-            # 扣庫存（尚未 commit 前不會真的生效）
-            cur_prod.execute(
-                "UPDATE products SET stock = stock - ? WHERE id = ?",
-                (item["quantity"], item["id"]),
-            )
-
         product_str = ", ".join(product_names)
         total_amount = sum(item["quantity"] for item in cart_items)
 
         # 只存步驟 ID 串接（依你原本要求）
         step_name_str = " -> ".join(map(str, selected_steps_ids))
+
+        # 計算預估交期 (Lead Time)
+        total_estimated_sec = 0
+        from datetime import timedelta
+        for step_id in selected_steps_ids:
+             cur_prod.execute("SELECT estimated_time_sec FROM standard_process WHERE step_order=?", (step_id,))
+             r = cur_prod.fetchone()
+             if r and r["estimated_time_sec"]:
+                 total_estimated_sec += int(r["estimated_time_sec"])
+
+        total_manufacturing_sec = total_estimated_sec * total_amount
+        estimated_delivery_dt = datetime.now() + timedelta(seconds=total_manufacturing_sec)
+        estimated_delivery_str = estimated_delivery_dt.strftime("%Y-%m-%d %H:%M:%S")
 
         order_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         note = "無備註"
@@ -296,8 +320,10 @@ def submit_order_api():
                 amount,
                 total_price,
                 step_name,
-                note
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                note,
+                status,
+                estimated_delivery
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
         cur_order.execute(
@@ -311,6 +337,8 @@ def submit_order_api():
                 total_price,
                 step_name_str,
                 note,
+                "pending_payment",
+                estimated_delivery_str
             ),
         )
 
@@ -322,8 +350,8 @@ def submit_order_api():
         return jsonify(
             {
                 "success": True,
-                "message": "下單成功！",
-                "redirect_url": url_for("factory.simulate", order_id=custom_order_id),
+                "message": "下單成功，請進行付款！",
+                "redirect_url": url_for("order.order_history"),
             }
         )
 
@@ -340,6 +368,31 @@ def submit_order_api():
             conn_prod.close()
         if conn_order:
             conn_order.close()
+
+
+# -----------------------------------------------------------
+#  4.5 API：模擬結帳付款
+# -----------------------------------------------------------
+@order_bp.route("/api/pay_order/<order_id>", methods=["POST"])
+@login_required
+def pay_order_api(order_id):
+    customer_name = session.get("account", "Guest")
+    conn = get_order_mgmt_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "UPDATE order_list SET status = 'active' WHERE order_id = ? AND customer_name = ? AND status = 'pending_payment'",
+            (order_id, customer_name)
+        )
+        if cur.rowcount == 0:
+            return jsonify({"success": False, "message": "訂單無法付款或不存在"}), 400
+        conn.commit()
+        return jsonify({"success": True, "message": "付款成功，訂單已送入工廠排程！"})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        conn.close()
 
 
 # -----------------------------------------------------------
@@ -361,7 +414,7 @@ def order_history():
         """
         SELECT
             order_id, date, customer_name, product, amount, total_price,
-            step_name, note, status, rejected_at, cancelled_at
+            step_name, note, status, rejected_at, cancelled_at, estimated_delivery
         FROM order_list
         WHERE customer_name = ?
         ORDER BY date DESC
@@ -431,3 +484,72 @@ def cancel_my_order(order_id):
 
     flash("已取消訂單（已保留紀錄）", "success")
     return redirect(url_for("order.order_history"))
+
+
+# -----------------------------------------------------------
+#  7. 生產履歷與產品追溯
+# -----------------------------------------------------------
+@order_bp.route("/trace/<order_id>", methods=["GET"])
+@login_required
+def order_trace(order_id):
+    customer_name = session.get("account", "Guest")
+    conn_order = get_order_mgmt_db()
+    conn_prod = get_product_db()
+    
+    try:
+        # Check order existence and permission
+        cur = conn_order.cursor()
+        cur.row_factory = sqlite3.Row
+        order = cur.execute(
+            "SELECT * FROM order_list WHERE order_id = ? AND customer_name = ?", 
+            (order_id, customer_name)
+        ).fetchone()
+        
+        if not order:
+            flash("找不到該訂單或無權限查看", "danger")
+            return redirect(url_for("order.order_history"))
+            
+        # Get step definitions
+        chain_strs = [x.strip() for x in (order["step_name"] or "").split("->") if x.strip()]
+        steps_info = {}
+        for s in chain_strs:
+            try:
+                sid = int(s)
+                c = conn_prod.cursor()
+                c.row_factory = sqlite3.Row
+                r = c.execute("SELECT step_name, station FROM standard_process WHERE step_order=?", (sid,)).fetchone()
+                if r:
+                    steps_info[sid] = dict(r)
+            except:
+                pass
+                
+        # Get piece progress
+        records = cur.execute("""
+            SELECT piece_no, step_order, started_at, finished_at
+            FROM piece_step_progress
+            WHERE order_id = ? AND state = 'finished'
+            ORDER BY piece_no ASC, step_order ASC
+        """, (order_id,)).fetchall()
+        
+        # Group by piece
+        pieces = {}
+        for row in records:
+            pno = row["piece_no"]
+            if pno not in pieces:
+                pieces[pno] = []
+            
+            step_id = row["step_order"]
+            info = steps_info.get(step_id, {"step_name": f"Step {step_id}", "station": "未知機台"})
+            
+            pieces[pno].append({
+                "step_order": step_id,
+                "step_name": info["step_name"],
+                "station": info["station"],
+                "started_at": row["started_at"],
+                "finished_at": row["finished_at"]
+            })
+            
+        return render_template("order/trace.html", order=order, pieces=pieces)
+    finally:
+        conn_order.close()
+        conn_prod.close()

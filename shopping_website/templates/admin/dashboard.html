@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}工廠戰情室 (Admin Dashboard){% endblock %}
+
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:flex-end;">
+  <h2 class="page-title">🏭 智慧工廠戰情室</h2>
+  <span id="last-update" class="text-muted">載入中...</span>
+</div>
+
+<div style="display:flex; gap:1.5rem; margin-top:1rem; flex-wrap:wrap;">
+  <!-- 機台狀態 -->
+  <div style="flex:2; min-width:300px;">
+    <h3>即時機台狀態</h3>
+    <div id="station-container" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:1rem;">
+    </div>
+  </div>
+  
+  <!-- 物料庫存 -->
+  <div style="flex:1; min-width:280px;">
+    <h3>即時物料庫存</h3>
+    <div id="material-container" style="background:#fff; padding:1.5rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+    </div>
+    <div style="margin-top:1rem; text-align:right;">
+        <button class="btn btn-primary" onclick="restock()">📦 一鍵補齊庫存</button>
+    </div>
+  </div>
+</div>
+
+<div style="margin-top:2.5rem;">
+  <h3>當前生產佇列 (Active Orders)</h3>
+  <div class="table-wrap">
+    <table class="table-orders">
+      <thead>
+        <tr>
+          <th>訂單編號</th>
+          <th>客戶</th>
+          <th>商品</th>
+          <th>數量</th>
+          <th>狀態</th>
+          <th>下單時間</th>
+        </tr>
+      </thead>
+      <tbody id="order-container">
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 報表區 -->
+<div style="display:flex; gap:1.5rem; margin-top:2.5rem; flex-wrap:wrap;">
+  <div style="flex:1; min-width:300px; background:#fff; padding:1.5rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+    <h3 style="margin-bottom:1rem; text-align:center;">訂單狀態分佈</h3>
+    <div style="position:relative; height:300px;">
+        <canvas id="statusPieChart"></canvas>
+    </div>
+  </div>
+  <div style="flex:2; min-width:400px; background:#fff; padding:1.5rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+    <h3 style="margin-bottom:1rem; text-align:center;">每日完成訂單趨勢</h3>
+    <div style="position:relative; height:300px;">
+        <canvas id="dailyLineChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+let statusPieChart, dailyLineChart;
+
+async function fetchStatus() {
+    try {
+        const res = await fetch("/admin/api/status");
+        const data = await res.json();
+        
+        document.getElementById("last-update").textContent = "即時監控連線中 | 最後更新: " + data.now;
+        
+        // 渲染機台
+        const stationDiv = document.getElementById("station-container");
+        stationDiv.innerHTML = data.stations.map(s => {
+            let isError = s.is_error === 1;
+            let isRunning = s.current_order_id && !isError;
+            let badge = isError ? `<span class="badge badge-danger">故障停機</span>` :
+                        isRunning ? `<span class="badge badge-primary">運轉中</span>` : 
+                        `<span class="badge badge-success">閒置</span>`;
+            
+            let btn = isError ? 
+              `<button onclick="repairMachine('${s.station}')" class="btn btn-success" style="padding:0.25rem 0.5rem;font-size:0.85rem;margin-top:0.5rem;">🔧 修復機台</button>` :
+              `<button onclick="breakMachine('${s.station}')" class="btn btn-danger" style="padding:0.25rem 0.5rem;font-size:0.85rem;margin-top:0.5rem;">💥 模擬故障</button>`;
+
+            return `
+            <div style="background:#fff; border-left:5px solid ${isError ? '#dc3545' : isRunning ? '#0d6efd' : '#28a745'}; padding:1.25rem; border-radius:6px; box-shadow:0 2px 5px rgba(0,0,0,0.05); display:flex; flex-direction:column; justify-content:space-between;">
+                <div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:0.75rem;">
+                        <strong style="font-size:1.1rem;">${s.station}</strong>
+                        ${badge}
+                    </div>
+                    <div style="font-size:0.9rem; color:#555; min-height:40px;">
+                        ${isRunning ? `單號: <span class="mono">${s.current_order_id}</span><br>預計完成: ${s.busy_until}` : 
+                          isError ? "等待維修中，產線停擺" : "等待派工中"}
+                    </div>
+                </div>
+                <div style="text-align:right;">
+                    ${btn}
+                </div>
+            </div>`;
+        }).join("");
+        
+        // 渲染物料
+        const matDiv = document.getElementById("material-container");
+        matDiv.innerHTML = data.materials.map(m => {
+            let p = Math.min(100, (m.stock / 2000) * 100);
+            let color = m.stock <= 500 ? '#dc3545' : '#28a745';
+            return `
+            <div style="margin-bottom:1rem;">
+                <div style="display:flex; justify-content:space-between; font-size:0.95rem; font-weight:bold; margin-bottom:0.25rem;">
+                    <span>${m.name}</span>
+                    <span style="color:${color};">${m.stock}</span>
+                </div>
+                <div style="background:#e9ecef; height:10px; border-radius:5px; overflow:hidden;">
+                    <div style="background:${color}; height:100%; border-radius:5px; width:${p}%; transition:width 0.5s ease;"></div>
+                </div>
+            </div>`;
+        }).join("");
+        
+        // 渲染訂單
+        const ordDiv = document.getElementById("order-container");
+        if (data.orders.length === 0) {
+            ordDiv.innerHTML = `<tr><td colspan="6" class="text-center text-muted">目前無活躍訂單</td></tr>`;
+        } else {
+            ordDiv.innerHTML = data.orders.map(o => {
+                let stBadge = o.status === 'pending_payment' ? '<span class="badge badge-warning" style="background-color: #ffc107; color: #000;">等待付款</span>' : '<span class="badge badge-primary">產線處理中</span>';
+                return `
+                <tr>
+                    <td class="mono"><a href="/factory/simulate?order_id=${o.order_id}" target="_blank">${o.order_id}</a></td>
+                    <td>${o.customer_name}</td>
+                    <td class="cell-wrap">${o.product}</td>
+                    <td>${o.amount}</td>
+                    <td>${stBadge}</td>
+                    <td>${o.date}</td>
+                </tr>`;
+            }).join("");
+        }
+    } catch(err) {
+        console.error(err);
+    }
+}
+
+async function repairMachine(station) {
+    await fetch("/admin/api/repair", {
+        method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({station})
+    });
+    fetchStatus();
+}
+
+async function breakMachine(station) {
+    await fetch("/admin/api/break", {
+        method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({station})
+    });
+    fetchStatus();
+}
+
+async function restock() {
+    await fetch("/admin/api/restock", {method: "POST"});
+    alert("所有原物料已補齊至 2000 件！");
+    fetchStatus();
+}
+
+async function fetchAnalytics() {
+    try {
+        const res = await fetch("/admin/api/analytics");
+        const data = await res.json();
+        
+        // Render Pie Chart
+        const ctxPie = document.getElementById('statusPieChart').getContext('2d');
+        if (statusPieChart) statusPieChart.destroy();
+        statusPieChart = new Chart(ctxPie, {
+            type: 'pie',
+            data: {
+                labels: data.status_pie.labels,
+                datasets: [{
+                    data: data.status_pie.values,
+                    backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6c757d', '#17a2b8']
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+        
+        // Render Line Chart
+        const ctxLine = document.getElementById('dailyLineChart').getContext('2d');
+        if (dailyLineChart) dailyLineChart.destroy();
+        dailyLineChart = new Chart(ctxLine, {
+            type: 'line',
+            data: {
+                labels: data.daily_line.labels.length ? data.daily_line.labels : ['無數據'],
+                datasets: [{
+                    label: '完成訂單數',
+                    data: data.daily_line.values.length ? data.daily_line.values : [0],
+                    borderColor: '#198754',
+                    backgroundColor: 'rgba(25, 135, 84, 0.2)',
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    } catch(err) {
+        console.error("Error fetching analytics:", err);
+    }
+}
+
+function initSSE() {
+    const evtSource = new EventSource("/api/stream");
+    evtSource.onmessage = function(e) {
+        fetchStatus();
+        fetchAnalytics();
+    };
+    fetchStatus();
+    fetchAnalytics();
+}
+window.addEventListener("load", initSSE);
+</script>
+{% endblock %}

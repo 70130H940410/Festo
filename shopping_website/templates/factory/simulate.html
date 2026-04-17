@@ -46,15 +46,15 @@
             <td>
               {% set st = (order_info.status | default("in_progress")) %}
               {% if st in ["in_progress", "running", "active"] %}
-                <span class="badge badge-info">產線進行中…</span>
+                <span id="order-status-badge" class="badge badge-info">產線進行中…</span>
               {% elif st in ["done", "finished", "complete", "completed"] %}
-                <span class="badge badge-success">已完成</span>
+                <span id="order-status-badge" class="badge badge-success">已完成</span>
               {% elif st in ["rejected", "error", "failed"] %}
-                <span class="badge badge-danger">異常 / 已拒絕</span>
+                <span id="order-status-badge" class="badge badge-danger">異常 / 已拒絕</span>
               {% elif st in ["cancelled", "canceled"] %}
-                <span class="badge badge-secondary">已取消</span>
+                <span id="order-status-badge" class="badge badge-secondary">已取消</span>
               {% else %}
-                <span class="badge badge-secondary">{{ st }}</span>
+                <span id="order-status-badge" class="badge badge-secondary">{{ st }}</span>
               {% endif %}
             </td>
           </tr>
@@ -148,33 +148,72 @@
 <script>
   const ORDER_ID = "{{ order_info.order_id | default('') }}";
   const statusEl = document.getElementById("sim-status");
+  const timelineList = document.querySelector(".timeline");
+  const orderStatusBadge = document.getElementById("order-status-badge");
 
-  async function getJson(url) {
-    const res = await fetch(url, { method: "GET", cache: "no-store" });
-    const text = await res.text();
-    try { return JSON.parse(text); }
-    catch(e) { console.log("API not JSON:", text); return null; }
+  async function updateDOM() {
+      const res = await fetch(`/factory/api/order_status/${ORDER_ID}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      
+      const st = data.order_info.status;
+      if (orderStatusBadge) {
+          if (["in_progress", "running", "active"].includes(st)) {
+              orderStatusBadge.className = "badge badge-info";
+              orderStatusBadge.textContent = "產線進行中…";
+          } else if (["done", "finished", "complete", "completed"].includes(st)) {
+              orderStatusBadge.className = "badge badge-success";
+              orderStatusBadge.textContent = "已完成";
+          }
+      }
+
+      let html = "";
+      data.steps.forEach((s, idx) => {
+          let step_state = s.state || "pending";
+          let badgeHtml = step_state === "finished" ? '<span class="badge badge-success">已完成</span>' :
+                          step_state === "error" ? '<span class="badge badge-danger">⚠️ 機台故障，等待維修</span>' :
+                          step_state === "running" ? '<span class="badge badge-primary">進行中…</span>' :
+                          '<span class="badge badge-secondary">尚未開始</span>';
+          
+          html += `<li class="timeline-step ${step_state}">
+            <div style="display:flex; align-items:center; gap:.6rem; flex-wrap:wrap;">
+              <strong>Step ${s.step_order || (idx+1)}：${s.step_name}</strong>
+              <span class="text-muted">(${s.done_qty}/${s.total_qty})</span>
+              ${badgeHtml}
+            </div>
+            ${s.station ? `<div class="text-muted" style="margin-top:.25rem;"><strong>站點：</strong>${s.station}</div>` : ""}
+            ${s.description ? `<div class="text-muted" style="margin-top:.25rem; line-height:1.5;">${s.description}</div>` : ""}
+            ${s.estimated_time_sec ? `<div class="text-muted" style="margin-top:.25rem;"><strong>預估時間：</strong>${s.estimated_time_sec} 秒 / 件</div>` : ""}
+          </li>`;
+      });
+      timelineList.innerHTML = html;
   }
 
-  async function initAndRun() {
+  function initSSE() {
     if (!ORDER_ID) {
       statusEl.textContent = "缺少 order_id（請用 ?order_id=... 開啟此頁）";
       return;
     }
 
-    statusEl.textContent = "初始化中…";
-    await getJson(`/factory/api/init/${ORDER_ID}`);
-
-    statusEl.textContent = "模擬進行中（每秒推進一次）…";
-
-    setInterval(async () => {
-      const r = await getJson(`/factory/api/tick`);
-      console.log("tick:", r);
-      window.location.reload();
-    }, 1000);
+    statusEl.textContent = "即時監控中 (SSE 連線已建立) ...";
+    
+    const evtSource = new EventSource("/api/stream");
+    evtSource.onmessage = function(e) {
+        try {
+            const msg = JSON.parse(e.data);
+            if (msg.order_id === ORDER_ID) {
+                updateDOM();
+            }
+        } catch(err) {
+            console.error(err);
+        }
+    };
+    
+    // 初始化先抓取一次最新資料
+    updateDOM();
   }
 
-  window.addEventListener("load", initAndRun);
+  window.addEventListener("load", initSSE);
 </script>
 {% endblock %}
 

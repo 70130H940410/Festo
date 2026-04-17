@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}生產履歷 | {{ order.order_id }}{% endblock %}
+
+{% block content %}
+<div style="max-width: 800px; margin: 0 auto; background: #fff; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border-top: 10px solid #28a745;">
+    <div style="text-align: center; margin-bottom: 2rem;">
+        <h1 style="color: #28a745; margin-bottom: 0.5rem;">✅ 數位出廠證明書</h1>
+        <p class="text-muted" style="letter-spacing: 2px;">CERTIFICATE OF AUTHENTICITY & TRACEABILITY</p>
+    </div>
+
+    <div style="background: #f8f9fa; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 1.1rem;">
+            <div><strong>訂單編號：</strong><span class="mono">{{ order.order_id }}</span></div>
+            <div><strong>購買客戶：</strong>{{ order.customer_name }}</div>
+            <div style="grid-column: span 2;"><strong>商品明細：</strong>{{ order.product }}</div>
+            <div><strong>下單時間：</strong>{{ order.date }}</div>
+            <div><strong>出廠時間：</strong>{{ order.updated_at | default(order.date) }}</div>
+        </div>
+    </div>
+
+    <h3 style="margin-bottom: 1.5rem; border-bottom: 2px solid #eee; padding-bottom: 0.5rem;">🏭 生產時間軸 (Production Timeline)</h3>
+
+    {% if pieces %}
+        {% for piece_no, steps in pieces.items() %}
+        <div style="margin-bottom: 2rem;">
+            <h4 style="color: #0d6efd; margin-bottom: 1rem;">▶ 第 {{ piece_no }} 件產品</h4>
+            <div style="border-left: 3px solid #dee2e6; margin-left: 1rem; padding-left: 1.5rem;">
+                {% for s in steps %}
+                <div style="position: relative; margin-bottom: 1.5rem;">
+                    <!-- 圓點 -->
+                    <div style="position: absolute; left: -1.9rem; top: 0.25rem; width: 14px; height: 14px; background: #28a745; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 0 0 2px #28a745;"></div>
+                    
+                    <div style="font-weight: bold; font-size: 1.1rem; margin-bottom: 0.25rem;">{{ s.step_name }}</div>
+                    <div style="display: flex; gap: 2rem; color: #6c757d; font-size: 0.95rem;">
+                        <div><i class="fas fa-microchip"></i> <strong>加工站點：</strong>{{ s.station }}</div>
+                        <div><i class="far fa-clock"></i> <strong>開始：</strong><span class="mono">{{ s.started_at }}</span></div>
+                        <div><i class="fas fa-check"></i> <strong>完成：</strong><span class="mono">{{ s.finished_at }}</span></div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <p class="text-muted text-center">目前尚無詳細的生產加工紀錄。</p>
+    {% endif %}
+
+    <div style="text-align: center; margin-top: 3rem; padding-top: 2rem; border-top: 1px dashed #ccc;">
+        <p class="text-muted" style="font-size: 0.85rem;">本系統由智慧工廠產線自動化紀錄，確保資料真實不可篡改。</p>
+        <a href="{{ url_for('order.order_history') }}" class="btn btn-secondary mt-3">返回歷史訂單</a>
+    </div>
+</div>
+{% endblock %}

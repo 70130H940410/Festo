@@ -1,6 +1,8 @@
 # shopping_website/app.py
 import os
 import logging
+import threading
+import time
 from flask import Flask, render_template, session
 
 # === 專案路徑 & 資料庫路徑 ===
@@ -23,10 +25,12 @@ def create_app() -> Flask:
     from core.order_routes import order_bp
     from core.factory_routes import factory_bp
     from core.manager_routes import manager_bp
+    from core.admin_routes import admin_bp
 
     app.register_blueprint(auth_bp)       # /login, /logout, /register...
     app.register_blueprint(order_bp)      # /order/...
     app.register_blueprint(factory_bp)    # /factory/...
+    app.register_blueprint(admin_bp)      # /admin/...
     app.register_blueprint(manager_bp)    # /manager/...
 
     # === 首頁 ===
@@ -35,6 +39,22 @@ def create_app() -> Flask:
         # base.html 裡已經用 {{ request.endpoint }} 設定 data-page
         # Loader 會判斷 endpoint == "index" 才顯示一次動畫
         return render_template("index.html")
+
+    # === SSE Stream ===
+    from core.sse import sse_manager
+    from flask import Response
+
+    @app.route('/api/stream')
+    def stream():
+        def event_stream():
+            q = sse_manager.listen()
+            try:
+                while True:
+                    msg = q.get()
+                    yield f"data: {msg}\n\n"
+            except GeneratorExit:
+                pass
+        return Response(event_stream(), mimetype="text/event-stream")
 
     # === 給所有模板共用的變數（例如右上角顯示帳號） ===
     @app.context_processor
@@ -48,6 +68,17 @@ def create_app() -> Flask:
     return app
 
 
+def background_factory_worker(app):
+    """背景執行緒，持續推動工廠排程"""
+    from core.factory_routes import _tick_all_active_orders
+    while True:
+        try:
+            _tick_all_active_orders(app)
+        except Exception as e:
+            print(f"Background worker error: {e}")
+        time.sleep(1)
+
+
 # 直接 python app.py 執行時用這段
 if __name__ == "__main__":
     # 一般的存取紀錄就會被隱藏，只留下錯誤訊息
@@ -55,6 +86,13 @@ if __name__ == "__main__":
     #log.setLevel(logging.ERROR)
 
     app = create_app()
+
+    # 在除錯模式下，Werkzeug 會啟動兩個 process（一個主 process，一個 worker）
+    # 為了避免啟動兩次背景執行緒，我們只在主 worker 內啟動它
+    if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not app.debug:
+        t = threading.Thread(target=background_factory_worker, args=(app,), daemon=True)
+        t.start()
+
     # 開發階段開 debug 比較好除錯，之後部署再關掉
     app.run(host='0.0.0.0', port=5000, debug=True)
 

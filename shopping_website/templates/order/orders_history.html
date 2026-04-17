@@ -2,93 +2,187 @@
 {% block title %}我的訂單紀錄{% endblock %}
 
 {% block content %}
-<h2 class="page-title">我的訂單紀錄</h2>
-<p class="text-muted">
-  可查看你的歷史訂單；若被拒絕/取消/完成，備註會顯示原因或紀錄。
-  <b>點訂單編號可直接進入模擬頁。</b>
-</p>
+<style>
+  /* Tabs */
+  .order-tabs { display: flex; gap: 1rem; border-bottom: 2px solid #eee; margin-bottom: 1.5rem; overflow-x: auto; }
+  .tab-btn { background: none; border: none; padding: 0.75rem 1.5rem; cursor: pointer; font-size: 1rem; color: #666; border-bottom: 3px solid transparent; margin-bottom: -2px; font-weight: bold; white-space: nowrap; transition: color 0.2s; }
+  .tab-btn:hover { color: #000; }
+  .tab-btn.active { color: #0d6efd; border-bottom-color: #0d6efd; }
+  
+  /* Cards */
+  .order-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 12px; margin-bottom: 1.5rem; padding: 1.5rem; box-shadow: 0 4px 6px rgba(0,0,0,0.02); transition: box-shadow 0.2s, transform 0.2s; }
+  .order-card:hover { box-shadow: 0 8px 15px rgba(0,0,0,0.06); transform: translateY(-2px); }
+  .card-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #eee; padding-bottom: 1rem; margin-bottom: 1rem; }
+  .card-title { font-size: 1.15rem; font-weight: bold; color: #333; }
+  .card-date { color: #888; font-size: 0.9rem; }
+  .card-body { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+  .card-info { flex: 2; min-width: 250px; line-height: 1.8; font-size: 0.95rem; }
+  .card-actions { flex: 1; min-width: 150px; text-align: right; display: flex; flex-direction: column; gap: 0.75rem; justify-content: center; align-items: flex-end; }
+  .info-label { color: #888; width: 75px; display: inline-block; }
+  
+  /* Modal */
+  .custom-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.3s; }
+  .custom-modal.active { display: flex; opacity: 1; }
+  .modal-content { background: #fff; padding: 2rem; border-radius: 12px; width: 90%; max-width: 450px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); transform: translateY(-20px); transition: transform 0.3s; }
+  .custom-modal.active .modal-content { transform: translateY(0); }
+</style>
 
-<div class="table-wrap">
-  <table class="table-orders table-user-orders">
-    <thead>
-      <tr>
-        <th>訂單編號（點我進模擬）</th>
-        <th>時間</th>
-        <th>商品</th>
-        <th>數量</th>
-        <th>總價</th>
-        <th>狀態</th>
-        <th>備註</th>
-        <th>操作</th>
-      </tr>
-    </thead>
+<div style="max-width: 900px; margin: 0 auto; padding: 0 1rem;">
+  <div style="margin-bottom: 2rem;">
+    <h2 class="page-title" style="margin-bottom: 0.5rem;">🛍️ 我的訂單紀錄</h2>
+    <p class="text-muted">隨時掌握您的商品製造進度與歷史訂單狀態。</p>
+  </div>
 
-    <tbody>
-      {% if orders and orders|length > 0 %}
-        {% for o in orders %}
-          {% set st = o["status"] %}
-          {% set is_rejected = (st == "rejected") %}
-          {% set is_cancelled = (st == "cancelled") %}
-          {% set is_completed = (st == "completed") %}
+  <!-- Tabs -->
+  <div class="order-tabs">
+    <button class="tab-btn active" onclick="filterOrders('all', this)">全部</button>
+    <button class="tab-btn" onclick="filterOrders('pending_payment', this)">等待付款</button>
+    <button class="tab-btn" onclick="filterOrders('active', this)">處理中</button>
+    <button class="tab-btn" onclick="filterOrders('completed', this)">已完成</button>
+    <button class="tab-btn" onclick="filterOrders('cancelled', this)">已取消 / 拒絕</button>
+  </div>
 
-          <tr class="{% if is_rejected %}row-rejected{% endif %} {% if is_cancelled %}row-cancelled{% endif %} {% if is_completed %}row-completed{% endif %}">
-            <td class="mono">
-              <a href="{{ url_for('factory.simulate', order_id=o['order_id']) }}" title="進入製程模擬">
-                {{ o["order_id"] }}
-              </a>
-            </td>
-            <td>{{ o["date"] }}</td>
-            <td class="cell-wrap">{{ o["product"] }}</td>
-            <td>{{ o["amount"] }}</td>
-            <td>{{ o["total_price"] }}</td>
-
-            <td>
-              {% if is_rejected %}
-                <span class="badge badge-danger">已拒絕</span>
-              {% elif is_cancelled %}
-                <span class="badge badge-muted">已取消</span>
-              {% elif is_completed %}
-                <span class="badge badge-info">已完成</span>
-              {% else %}
-                <span class="badge badge-success">處理中</span>
-              {% endif %}
-            </td>
-
-            <td class="cell-note">{{ o["note"] }}</td>
-
-            <td class="cell-actions">
-              {% if st == "active" %}
-                <form class="actions-row"
-                      method="post"
-                      action="{{ url_for('order.cancel_my_order', order_id=o['order_id']) }}"
-                      data-confirm="確定要取消這筆訂單嗎？">
-
-                  <!-- ✅ 按鈕左、下拉右（你之前要求的排列） -->
-                  <button type="submit" class="btn btn-danger btn-cancel">取消訂單</button>
-
-                  <select name="reason" required class="select-reason">
-                    <option value="" disabled selected>選擇取消原因</option>
-                    <option value="改變心意">改變心意</option>
-                    <option value="要修改訂單">要修改訂單</option>
-                    <option value="下錯商品/數量">下錯商品/數量</option>
-                    <option value="其他原因">其他原因</option>
-                  </select>
-
-                </form>
-              {% else %}
-                <span class="text-muted">—</span>
-              {% endif %}
-            </td>
-          </tr>
-        {% endfor %}
-      {% else %}
-        <tr>
-          <td colspan="8" class="text-center text-muted">目前沒有訂單紀錄</td>
-        </tr>
-      {% endif %}
-    </tbody>
-  </table>
+  <div id="orders-container">
+    {% if orders %}
+      {% for o in orders %}
+      <div class="order-card" data-status="{{ o['status'] }}">
+        <div class="card-header">
+          <div>
+            <span class="card-title mono">#{{ o["order_id"] }}</span>
+            <span class="card-date" style="margin-left: 1rem;"><i class="far fa-clock"></i> {{ o["date"] }}</span>
+          </div>
+          <div>
+            {% set st = o["status"] %}
+            {% if st == "rejected" %}<span class="badge badge-danger">已拒絕</span>
+            {% elif st == "cancelled" %}<span class="badge badge-muted" style="background:#6c757d; color:#fff;">已取消</span>
+            {% elif st == "completed" %}<span class="badge badge-info" style="background:#17a2b8; color:#fff;">已完成</span>
+            {% elif st == "pending_payment" %}<span class="badge badge-warning" style="background-color: #ffc107; color: #000;">等待付款</span>
+            {% else %}<span class="badge badge-success">處理中</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="card-info">
+            <div><span class="info-label">商品：</span> <strong>{{ o["product"] }}</strong></div>
+            <div><span class="info-label">數量：</span> {{ o["amount"] }}</div>
+            <div><span class="info-label">總價：</span> <span style="color:#d9534f; font-weight:bold; font-size:1.1rem;">${{ o["total_price"] }}</span></div>
+            {% if o["estimated_delivery"] %}
+            <div><span class="info-label">預估交期：</span> <span class="text-muted">{{ o["estimated_delivery"] }}</span></div>
+            {% endif %}
+            {% if o["note"] %}
+            <div style="margin-top: 0.75rem; padding: 0.75rem; background: #fff3cd; border-radius: 6px; color: #856404; font-size: 0.9rem; border-left: 4px solid #ffeeba;">
+              <strong>⚠️ 備註：</strong>{{ o["note"] }}
+            </div>
+            {% endif %}
+          </div>
+          <div class="card-actions">
+            {% if st == "pending_payment" %}
+              <button onclick="payOrder('{{ o['order_id'] }}')" class="btn btn-primary" style="width: 100%; box-shadow:0 2px 5px rgba(13,110,253,0.3);">💳 立即付款</button>
+            {% elif st == "completed" %}
+              <a href="{{ url_for('order.order_trace', order_id=o['order_id']) }}" class="btn btn-success" style="width: 100%; text-decoration: none; text-align: center;">🔍 生產履歷</a>
+            {% elif st == "active" %}
+              <a href="{{ url_for('factory.simulate', order_id=o['order_id']) }}" class="btn btn-primary" style="width: 100%; text-decoration: none; text-align: center;" target="_blank">🏭 查看生產進度</a>
+              <button onclick="openCancelModal('{{ o['order_id'] }}')" class="btn btn-outline-danger" style="width: 100%; margin-top: 0.5rem; background:none; border:1px solid #dc3545; color:#dc3545;">取消訂單</button>
+            {% else %}
+              <a href="{{ url_for('factory.simulate', order_id=o['order_id']) }}" class="btn btn-secondary" style="width: 100%; text-decoration: none; text-align: center; background:#6c757d;">瀏覽歷史進度</a>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div style="text-align: center; padding: 4rem 0; background: #f8f9fa; border-radius: 12px; color: #6c757d; border: 2px dashed #dee2e6;">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">📦</div>
+        <div style="font-size: 1.2rem; font-weight: bold;">目前沒有訂單紀錄</div>
+        <p style="margin-top: 0.5rem;">趕快去逛逛我們的智慧工廠商城吧！</p>
+        <a href="{{ url_for('order.order_page') }}" class="btn btn-primary mt-3">我要下單</a>
+      </div>
+    {% endif %}
+  </div>
 </div>
+
+<!-- Cancel Modal -->
+<div id="cancelModal" class="custom-modal">
+  <div class="modal-content">
+    <h3 style="margin-top: 0; color: #dc3545; border-bottom: 2px solid #f8d7da; padding-bottom: 0.5rem;">⚠️ 取消訂單</h3>
+    <p style="margin: 1.5rem 0;">您確定要取消訂單 <strong id="cancelOrderIdTxt" class="mono" style="font-size:1.1rem; background:#f8f9fa; padding:0.2rem 0.5rem; border-radius:4px;"></strong> 嗎？此操作無法還原。</p>
+    <form id="cancelForm" method="post" action="">
+      <div style="margin-bottom: 1.5rem;">
+        <label style="display:block; margin-bottom:0.5rem; color:#555; font-weight:bold;">請選擇取消原因：</label>
+        <select name="reason" required class="select-reason" style="width: 100%; padding: 0.75rem; border-radius: 6px; border: 1px solid #ced4da; font-size: 1rem; outline:none;">
+          <option value="" disabled selected>請選擇原因...</option>
+          <option value="改變心意">改變心意不想買了</option>
+          <option value="要修改訂單">想要修改訂單內容</option>
+          <option value="下錯商品/數量">下錯商品或數量</option>
+          <option value="等待時間太久">交期等待時間太久</option>
+          <option value="其他原因">其他原因</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+        <button type="button" class="btn" style="background:#e9ecef; color:#495057; border:none;" onclick="closeCancelModal()">暫不取消</button>
+        <button type="submit" class="btn btn-danger">確定取消訂單</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function filterOrders(status, btnElement) {
+    // Update tabs
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    btnElement.classList.add('active');
+    
+    // Update cards
+    const cards = document.querySelectorAll('.order-card');
+    let visibleCount = 0;
+    
+    cards.forEach(card => {
+        let cardStatus = card.getAttribute('data-status');
+        if (status === 'all') {
+            card.style.display = 'block';
+            visibleCount++;
+        } else if (status === 'cancelled') {
+            if (cardStatus === 'cancelled' || cardStatus === 'rejected') {
+                card.style.display = 'block';
+                visibleCount++;
+            } else {
+                card.style.display = 'none';
+            }
+        } else {
+            if (cardStatus === status) {
+                card.style.display = 'block';
+                visibleCount++;
+            } else {
+                card.style.display = 'none';
+            }
+        }
+    });
+}
+
+function payOrder(orderId) {
+    fetch(`/api/pay_order/${orderId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            window.location.reload();
+        } else {
+            alert("付款失敗：" + data.message);
+        }
+    })
+    .catch(err => console.error(err));
+}
+
+function openCancelModal(orderId) {
+    document.getElementById('cancelOrderIdTxt').textContent = orderId;
+    document.getElementById('cancelForm').action = `/orders/${orderId}/cancel`;
+    document.getElementById('cancelModal').classList.add('active');
+}
+
+function closeCancelModal() {
+    document.getElementById('cancelModal').classList.remove('active');
+}
+</script>
 {% endblock %}
-
-

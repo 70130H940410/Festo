@@ -185,10 +185,8 @@ def manager_orders():
     q = request.args.get("q", "").strip()
     step = request.args.get("step", "").strip()
 
-    # ✅ 三個勾選：顯示 rejected / cancelled / completed
-    show_rejected = request.args.get("show_rejected") == "1"
-    show_cancelled = request.args.get("show_cancelled") == "1"
-    show_completed = request.args.get("show_completed") == "1"
+    # ✅ 使用 tab 參數取代勾選框
+    tab = request.args.get("tab", "active")
 
     conn = get_order_mgmt_db()
     ensure_order_list_schema(conn)
@@ -204,17 +202,15 @@ def manager_orders():
     """
     params = []
 
-    # ✅ status：預設只 active，勾選才加入 rejected/cancelled/completed
-    allowed_status = ["active"]
-    if show_rejected:
-        allowed_status.append("rejected")
-    if show_cancelled:
-        allowed_status.append("cancelled")
-    if show_completed:
-        allowed_status.append("completed")
-
-    base_sql += f" AND status IN ({','.join(['?'] * len(allowed_status))}) "
-    params.extend(allowed_status)
+    if tab == "active":
+        base_sql += " AND status NOT IN ('completed', 'cancelled', 'rejected', 'pending_payment') "
+    elif tab == "completed":
+        base_sql += " AND status = 'completed' "
+    elif tab == "cancelled":
+        base_sql += " AND status IN ('cancelled', 'rejected') "
+    elif tab == "pending_payment":
+        base_sql += " AND status = 'pending_payment' "
+    # if tab == "all", do not filter status
 
     # ✅ 搜尋（訂單ID / 客戶 / 產品 / 備註 / ID(rowid)）
     if q:
@@ -269,10 +265,8 @@ def manager_orders():
         orders=orders,
         q=q,
         step=step,
-        steps=steps,
-        show_rejected=show_rejected,
-        show_cancelled=show_cancelled,
-        show_completed=show_completed,  # ✅ 一定要傳給前端
+        tab=tab,
+        steps=steps
     )
 
 
