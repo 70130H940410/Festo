@@ -136,6 +136,15 @@ def order_page():
             else:
                 # 將本次選的產品與數量暫存在 session，給製程規劃頁使用
                 session["current_order_items"] = selected_items
+                
+                # 記錄客製化選項
+                customizations = {}
+                if request.form.get("custom_laser"):
+                    customizations["laser"] = True
+                if request.form.get("custom_coating"):
+                    customizations["coating"] = True
+                session["current_order_customizations"] = customizations
+
                 return redirect(url_for("order.process_plan"))
 
     return render_template(
@@ -156,8 +165,18 @@ def process_plan():
     # 1. 從資料庫讀取製程步驟
     conn = get_product_db()
     cur = conn.cursor()
+    
+    # 根據客製化選項，決定顯示的站點
+    customizations = session.get("current_order_customizations", {})
+    allowed_steps = [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    if customizations.get("laser"):
+        allowed_steps.append(10)
+    if customizations.get("coating"):
+        allowed_steps.append(11)
+        
+    placeholders = ",".join(["?"] * len(allowed_steps))
     cur.execute(
-        """
+        f"""
         SELECT
             step_order,
             step_name,
@@ -165,8 +184,10 @@ def process_plan():
             description,
             estimated_time_sec
         FROM standard_process
+        WHERE step_order IN ({placeholders})
         ORDER BY step_order ASC
-        """
+        """,
+        allowed_steps
     )
     rows = cur.fetchall()
     conn.close()
@@ -254,6 +275,8 @@ def submit_order_api():
 
         # --- 重新計算總價並確認庫存充足 ---
         total_price = 0
+        order_note = ""
+        customizations = session.get("current_order_customizations", {})
         product_names = []
 
         for item in cart_items:
@@ -266,7 +289,7 @@ def submit_order_api():
             if not prod_row:
                 raise Exception(f"找不到產品 ID: {item['id']}")
 
-            # --- 原本檢查產品庫存，現改為檢查 BOM 原物料庫存 ---
+            # --- 檢查 BOM 原物料庫存 ---
             cur_prod.execute("""
                 SELECT rm.id, rm.name, rm.stock, b.quantity_required 
                 FROM bom b 
@@ -277,9 +300,8 @@ def submit_order_api():
             
             for rm in bom_rows:
                 required = rm["quantity_required"] * item["quantity"]
-                if rm["stock"] < required:
-                    raise Exception(f"原料 [{rm['name']}] 庫存不足 (需 {required}，剩餘 {rm['stock']})，無法生產產品 [{prod_row['name']}]")
                 
+                # 移除庫存不足阻擋下單的限制，允許扣減至負數（觸發自動採購）
                 # 扣除原料庫存（尚未 commit 前不會真的生效）
                 cur_prod.execute("UPDATE raw_materials SET stock = stock - ? WHERE id = ?", (required, rm["id"]))
 
@@ -287,6 +309,18 @@ def submit_order_api():
             total_price += price * item["quantity"]
 
             product_names.append(f"{prod_row['name']} x {item['quantity']}")
+
+        # 加上客製化費用與備註
+        notes = []
+        if customizations.get("laser"):
+            total_price += 200
+            notes.append("加購雷射雕刻(+$200)")
+        if customizations.get("coating"):
+            total_price += 500
+            notes.append("加購特殊烤漆(+$500)")
+            
+        if notes:
+            order_note = "客製化：" + "、".join(notes)
 
         product_str = ", ".join(product_names)
         total_amount = sum(item["quantity"] for item in cart_items)
@@ -308,7 +342,7 @@ def submit_order_api():
         estimated_delivery_str = estimated_delivery_dt.strftime("%Y-%m-%d %H:%M:%S")
 
         order_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        note = "無備註"
+        note = order_note if order_note else "無備註"
         custom_order_id = generate_order_id(conn_order)
 
         sql_order = """

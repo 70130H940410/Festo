@@ -98,6 +98,10 @@ def _ensure_tables(order_db: sqlite3.Connection) -> None:
         add_col("ALTER TABLE station_state ADD COLUMN busy_until TEXT;")
     if "updated_at" not in cols:
         add_col("ALTER TABLE station_state ADD COLUMN updated_at TEXT;")
+    if "temperature" not in cols:
+        add_col("ALTER TABLE station_state ADD COLUMN temperature REAL DEFAULT 25.0;")
+    if "power_usage" not in cols:
+        add_col("ALTER TABLE station_state ADD COLUMN power_usage INTEGER DEFAULT 0;")
 
     order_db.commit()
 
@@ -233,6 +237,84 @@ def _complete_due_jobs(order_db: sqlite3.Connection) -> int:
 
     order_db.commit()
     return completed_count
+
+import random
+
+def _update_iot_sensors(order_db: sqlite3.Connection) -> None:
+    """模擬 IoT 感測器數值變化，超過 90 度自動觸發故障"""
+    stations = order_db.execute("SELECT station, current_order_id, IFNULL(is_error, 0) as is_error, IFNULL(temperature, 25.0) as temp FROM station_state").fetchall()
+    
+    for st in stations:
+        station = st["station"]
+        is_error = st["is_error"]
+        temp = float(st["temp"])
+        current_order_id = st["current_order_id"]
+        
+        power = 0
+        
+        if is_error == 1:
+            # 故障狀態：溫度緩慢下降，耗電量 0
+            temp -= random.uniform(0.2, 0.8)
+            if temp < 25.0: temp = 25.0
+            power = 0
+        elif current_order_id:
+            # 運作中：溫度上升，耗電量高
+            temp += random.uniform(0.5, 2.0)
+            power = random.randint(1000, 1500)
+            if temp > 90.0:
+                # 觸發高溫預警與故障
+                is_error = 1
+                order_db.execute("UPDATE station_state SET is_error = 1 WHERE station = ?", (station,))
+        else:
+            # 待機中：溫度逐漸恢復室溫，耗電量低
+            temp -= random.uniform(0.5, 1.5)
+            if temp < 25.0: temp = 25.0
+            power = random.randint(10, 50)
+            
+        order_db.execute("UPDATE station_state SET temperature = ?, power_usage = ? WHERE station = ?", (round(temp, 1), power, station))
+    
+    order_db.commit()
+
+def _check_and_process_purchases(product_db: sqlite3.Connection) -> None:
+    now = _now()
+    
+    # 1. 檢查是否需要採購 (庫存 < 500)
+    materials = product_db.execute("SELECT id, stock FROM raw_materials").fetchall()
+    for m in materials:
+        m_id = m["id"]
+        stock = m["stock"]
+        if stock < 500:
+            # 檢查是否已經有正在 shipping 的這項物料
+            try:
+                # First check if purchase_orders table exists, might fail if not created
+                shipping = product_db.execute("SELECT COUNT(*) as c FROM purchase_orders WHERE material_id=? AND status='shipping'", (m_id,)).fetchone()["c"]
+                if shipping == 0:
+                    # 建立採購單，30 秒後抵達，數量補 2000
+                    arr_time = now + timedelta(seconds=30)
+                    product_db.execute(
+                        "INSERT INTO purchase_orders (material_id, quantity, status, ordered_at, expected_arrival) VALUES (?, ?, ?, ?, ?)",
+                        (m_id, 2000, 'shipping', _fmt(now), _fmt(arr_time))
+                    )
+            except sqlite3.OperationalError:
+                pass
+    
+    # 2. 檢查是否有採購單抵達
+    try:
+        arriving = product_db.execute("SELECT id, material_id, quantity, expected_arrival FROM purchase_orders WHERE status='shipping'").fetchall()
+        for po in arriving:
+            try:
+                arr_dt = datetime.fromisoformat(str(po["expected_arrival"]))
+                if now >= arr_dt:
+                    # 到貨
+                    product_db.execute("UPDATE purchase_orders SET status='arrived' WHERE id=?", (po["id"],))
+                    product_db.execute("UPDATE raw_materials SET stock = stock + ? WHERE id=?", (po["quantity"], po["material_id"]))
+            except Exception:
+                pass
+    except sqlite3.OperationalError:
+        pass
+        
+    product_db.commit()
+
 
 
 def _dispatch_for_focus_order(order_db: sqlite3.Connection, product_db: sqlite3.Connection, focus_order_id: str) -> List[dict]:
@@ -677,6 +759,12 @@ def _tick_all_active_orders(app):
             _ensure_tables(order_db)
             _ensure_station_rows(order_db, product_db)
 
+            # 更新 IoT 感測器數值
+            _update_iot_sensors(order_db)
+            
+            # 檢查與處理自動採購
+            _check_and_process_purchases(product_db)
+
             # 確保完成時間到的任務先被標記完成
             _complete_due_jobs(order_db)
 
@@ -685,6 +773,11 @@ def _tick_all_active_orders(app):
             for row in active_orders:
                 order_id = row["order_id"]
                 _tick_once_for_order(order_db, product_db, order_id)
+                
+            # 廣播全域更新事件給 Dashboard
+            from core.sse import sse_manager
+            import json
+            sse_manager.announce(json.dumps({"event": "update"}))
         except Exception as e:
             print(f"[Factory Scheduler Error] {e}")
         finally:

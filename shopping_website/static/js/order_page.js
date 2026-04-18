@@ -5,6 +5,9 @@ document.addEventListener("DOMContentLoaded", function () {
   const qtyInputs = Array.from(
     document.querySelectorAll(".order-qty-input")
   );
+  const customOptions = Array.from(
+    document.querySelectorAll(".custom-option")
+  );
   const summaryText = document.getElementById("order-summary-text");
   const totalPriceDisplay = document.getElementById("total-price-display");
 
@@ -28,6 +31,14 @@ document.addEventListener("DOMContentLoaded", function () {
         totalPrice += qty * price;
         const name = input.dataset.productName || "產品";
         pickedItems.push(`${name} x ${qty}`);
+      }
+    });
+
+    let hasCustomization = false;
+    customOptions.forEach((chk) => {
+      if (chk.checked) {
+        hasCustomization = true;
+        totalPrice += parseFloat(chk.dataset.price) || 0;
       }
     });
 
@@ -72,6 +83,12 @@ document.addEventListener("DOMContentLoaded", function () {
       if (num > max) num = max;
 
       input.value = num.toString();
+      updateSummary();
+    });
+  });
+
+  customOptions.forEach((chk) => {
+    chk.addEventListener("change", () => {
       updateSummary();
     });
   });

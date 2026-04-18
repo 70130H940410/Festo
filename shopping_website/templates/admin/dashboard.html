@@ -86,12 +86,20 @@ async function fetchStatus() {
               `<button onclick="repairMachine('${s.station}')" class="btn btn-success" style="padding:0.25rem 0.5rem;font-size:0.85rem;margin-top:0.5rem;">🔧 修復機台</button>` :
               `<button onclick="breakMachine('${s.station}')" class="btn btn-danger" style="padding:0.25rem 0.5rem;font-size:0.85rem;margin-top:0.5rem;">💥 模擬故障</button>`;
 
+            let temp = s.temperature !== null && s.temperature !== undefined ? parseFloat(s.temperature).toFixed(1) : "25.0";
+            let power = s.power_usage || 0;
+            let tempColor = temp > 80 ? '#dc3545' : (temp > 50 ? '#ffc107' : '#28a745');
+
             return `
             <div style="background:#fff; border-left:5px solid ${isError ? '#dc3545' : isRunning ? '#0d6efd' : '#28a745'}; padding:1.25rem; border-radius:6px; box-shadow:0 2px 5px rgba(0,0,0,0.05); display:flex; flex-direction:column; justify-content:space-between;">
                 <div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:0.75rem;">
                         <strong style="font-size:1.1rem;">${s.station}</strong>
                         ${badge}
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:0.85rem; background:#f8f9fa; padding:0.5rem; border-radius:4px; margin-bottom:0.5rem; border:1px solid #eee;">
+                        <span>🌡️ 溫度: <strong style="color:${tempColor}">${temp}°C</strong></span>
+                        <span>⚡ 耗電: <strong>${power} W</strong></span>
                     </div>
                     <div style="font-size:0.9rem; color:#555; min-height:40px;">
                         ${isRunning ? `單號: <span class="mono">${s.current_order_id}</span><br>預計完成: ${s.busy_until}` : 
@@ -108,15 +116,19 @@ async function fetchStatus() {
         const matDiv = document.getElementById("material-container");
         matDiv.innerHTML = data.materials.map(m => {
             let p = Math.min(100, (m.stock / 2000) * 100);
-            let color = m.stock <= 500 ? '#dc3545' : '#28a745';
+            let color = m.stock < 0 ? '#dc3545' : (m.stock <= 500 ? '#ffc107' : '#28a745');
+            
+            let incoming = data.purchases ? data.purchases.find(po => po.material_id === m.id) : null;
+            let shippingBadge = incoming ? `<span class="badge" style="background:#17a2b8; color:white; font-size:0.75rem; margin-left:8px;">🚚 採購 ${incoming.quantity} 件運輸中 (預計 ${incoming.expected_arrival} 抵達)</span>` : '';
+            
             return `
             <div style="margin-bottom:1rem;">
                 <div style="display:flex; justify-content:space-between; font-size:0.95rem; font-weight:bold; margin-bottom:0.25rem;">
-                    <span>${m.name}</span>
+                    <span>${m.name} ${shippingBadge}</span>
                     <span style="color:${color};">${m.stock}</span>
                 </div>
                 <div style="background:#e9ecef; height:10px; border-radius:5px; overflow:hidden;">
-                    <div style="background:${color}; height:100%; border-radius:5px; width:${p}%; transition:width 0.5s ease;"></div>
+                    <div style="background:${color}; height:100%; border-radius:5px; width:${Math.max(0, p)}%; transition:width 0.5s ease;"></div>
                 </div>
             </div>`;
         }).join("");

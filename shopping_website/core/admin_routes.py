@@ -38,12 +38,20 @@ def api_status():
         # Get raw materials
         materials = [dict(r) for r in prod_db.execute("SELECT * FROM raw_materials").fetchall()]
         
+        # Get shipping purchase orders
+        purchases = []
+        try:
+            purchases = [dict(r) for r in prod_db.execute("SELECT material_id, quantity, expected_arrival FROM purchase_orders WHERE status='shipping'").fetchall()]
+        except sqlite3.OperationalError:
+            pass
+        
         # Get active orders
         orders = [dict(r) for r in order_db.execute("SELECT order_id, customer_name, product, amount, status, date FROM order_list WHERE status IN ('active', 'pending_payment') ORDER BY date DESC").fetchall()]
         
         return jsonify({
             "stations": stations,
             "materials": materials,
+            "purchases": purchases,
             "orders": orders,
             "now": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         })
