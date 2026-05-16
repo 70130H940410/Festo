@@ -691,3 +691,122 @@ def _tick_all_active_orders(app):
             order_db.close()
             product_db.close()
 
+# -------------------------
+# 真實工廠戰情室 (Festo MES)
+# -------------------------
+@factory_bp.route("/mes_dashboard")
+@login_required
+def mes_dashboard():
+    if session.get("role") != "admin":
+        abort(403)
+    return render_template("factory/mes_dashboard.html")
+
+@factory_bp.route("/api/mes_status", methods=["GET"])
+@login_required
+def api_mes_status():
+    if session.get("role") != "admin":
+        abort(403)
+        
+    from core.db import get_festo_db
+    try:
+        conn = get_festo_db()
+        cursor = conn.cursor()
+        
+        # 取得機台 (Resource) 狀態 (從 tblResource 和 tblMachineReport)
+        # 為了避免 Access 資料庫對於子查詢執行過慢，這裡改用分段查詢
+        cursor.execute("SELECT ResourceID, ResourceName FROM tblResource WHERE ResourceType IS NOT NULL OR ResourceName IS NOT NULL")
+        resources = cursor.fetchall()
+        
+        machines = []
+        for r in resources:
+            cursor.execute("SELECT TOP 1 AutomaticMode, ManualMode, Busy, ErrorL0 FROM tblMachineReport WHERE ResourceID = ? ORDER BY ID DESC", (r.ResourceID,))
+            m = cursor.fetchone()
+            machines.append({
+                "ResourceID": r.ResourceID,
+                "ResourceName": r.ResourceName,
+                "AutomaticMode": m.AutomaticMode if m else False,
+                "ManualMode": m.ManualMode if m else False,
+                "Busy": m.Busy if m else False,
+                "ErrorL0": m.ErrorL0 if m else False
+            })
+        
+        # 取得活躍或最近的訂單 (從 tblOrder)
+        cursor.execute("""
+            SELECT TOP 10 ONo, PlanedStart, PlanedEnd, Start, End, State
+            FROM tblOrder
+            ORDER BY ONo DESC
+        """)
+        order_cols = [column[0] for column in cursor.description]
+        orders = [dict(zip(order_cols, row)) for row in cursor.fetchall()]
+
+        conn.close()
+        
+        # Format the data for JSON
+        def safe_date(d):
+            return d.strftime("%Y-%m-%d %H:%M:%S") if d else None
+            
+        formatted_orders = []
+        for o in orders:
+            formatted_orders.append({
+                "ONo": o["ONo"],
+                "PlanedStart": safe_date(o["PlanedStart"]),
+                "PlanedEnd": safe_date(o["PlanedEnd"]),
+                "Start": safe_date(o["Start"]),
+                "End": safe_date(o["End"]),
+                "State": o["State"]
+            })
+            
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return jsonify({
+            "machines": machines,
+            "orders": formatted_orders,
+            "now": now_str
+        })
+    except Exception as e:
+        print("MES Status Error:", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@factory_bp.route("/api/mes_analytics", methods=["GET"])
+@login_required
+def api_mes_analytics():
+    if session.get("role") != "admin":
+        abort(403)
+        
+    from core.db import get_festo_db
+    try:
+        conn = get_festo_db()
+        cursor = conn.cursor()
+        
+        # 統計各機台的平均電力與氣壓消耗
+        cursor.execute("""
+            SELECT r.ResourceName, AVG(ro.ElectricEnergy) as AvgEnergy, AVG(ro.CompressedAir) as AvgAir
+            FROM tblResourceOperation ro
+            INNER JOIN tblResource r ON ro.ResourceID = r.ResourceID
+            GROUP BY r.ResourceName
+        """)
+        
+        labels = []
+        energy_data = []
+        air_data = []
+        
+        for row in cursor.fetchall():
+            res_name = row[0]
+            avg_eng = float(row[1]) if row[1] else 0.0
+            avg_air = float(row[2]) if row[2] else 0.0
+            
+            labels.append(res_name)
+            energy_data.append(round(avg_eng, 2))
+            air_data.append(round(avg_air, 2))
+            
+        conn.close()
+        
+        return jsonify({
+            "labels": labels,
+            "energy": energy_data,
+            "air": air_data
+        })
+    except Exception as e:
+        print("MES Analytics Error:", e)
+        return jsonify({"error": str(e)}), 500
+

@@ -1,0 +1,430 @@
+{% extends "base.html" %}
+{% block title %}真實工廠戰情室 (MES Dashboard){% endblock %}
+
+{% block content %}
+<style>
+/* 戰情室專屬暗色/科技感樣式 */
+.mes-dashboard {
+    background-color: #0f172a;
+    color: #f8fafc;
+    padding: 2rem;
+    border-radius: 12px;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    min-height: calc(100vh - 160px);
+}
+
+.mes-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid #1e293b;
+    padding-bottom: 1rem;
+}
+
+.mes-title {
+    margin: 0;
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #38bdf8;
+    text-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.mes-status-badge {
+    padding: 0.4rem 1rem;
+    border-radius: 20px;
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    font-size: 0.9rem;
+    font-weight: 600;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.mes-status-badge.error {
+    background: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+.mes-pulse {
+    width: 8px;
+    height: 8px;
+    background-color: currentColor;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(currentColor, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(currentColor, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(currentColor, 0); }
+}
+
+.mes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+}
+
+.mes-card {
+    background: #1e293b;
+    border-radius: 10px;
+    padding: 1.5rem;
+    border: 1px solid #334155;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+}
+
+.mes-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.15);
+    border-color: #475569;
+}
+
+.mes-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.mes-card-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #f1f5f9;
+    margin: 0;
+}
+
+.mes-machine-state {
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.state-running { background: #10b981; color: #fff; }
+.state-idle { background: #64748b; color: #fff; }
+.state-error { background: #ef4444; color: #fff; }
+.state-manual { background: #f59e0b; color: #fff; }
+
+.mes-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.mes-stat {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.95rem;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    padding-bottom: 0.4rem;
+}
+
+.mes-stat-label { color: #94a3b8; }
+.mes-stat-value { font-family: monospace; color: #e2e8f0; font-weight: 500; }
+
+.mes-section-title {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin: 2rem 0 1rem 0;
+    color: #cbd5e1;
+    border-left: 4px solid #38bdf8;
+    padding-left: 0.75rem;
+}
+
+.mes-table-container {
+    background: #1e293b;
+    border-radius: 10px;
+    border: 1px solid #334155;
+    overflow-x: auto;
+}
+
+.mes-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.mes-table th, .mes-table td {
+    padding: 1rem;
+    border-bottom: 1px solid #334155;
+}
+
+.mes-table th {
+    background: #0f172a;
+    color: #94a3b8;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.mes-table tr:last-child td {
+    border-bottom: none;
+}
+
+.mes-table tbody tr:hover {
+    background: rgba(255,255,255,0.02);
+}
+
+/* Glass effect decorative element */
+.glass-glow {
+    position: absolute;
+    top: -50px;
+    right: -50px;
+    width: 100px;
+    height: 100px;
+    background: radial-gradient(circle, rgba(56, 189, 248, 0.2) 0%, rgba(0,0,0,0) 70%);
+    border-radius: 50%;
+    pointer-events: none;
+}
+</style>
+
+<div class="mes-dashboard">
+    <div class="mes-header">
+        <h1 class="mes-title">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg>
+            Festo MES 真實戰情室
+        </h1>
+        <div id="connection-status" class="mes-status-badge">
+            <div class="mes-pulse"></div>
+            連線中...
+        </div>
+    </div>
+
+    <div class="mes-section-title">機台即時狀態 (Resource Monitoring)</div>
+    <div id="machines-grid" class="mes-grid">
+        <!-- 機台卡片會透過 JS 動態載入 -->
+        <div style="color: #64748b; padding: 2rem;">載入中，請稍候...</div>
+    </div>
+
+    <div class="mes-section-title">機台能耗與氣壓分析 (Analytics)</div>
+    <div style="display:flex; gap:1.5rem; margin-bottom:2rem; flex-wrap:wrap;">
+        <div style="flex:1; min-width:300px; background:#1e293b; padding:1.5rem; border-radius:10px; border:1px solid #334155; height:350px;">
+            <h3 style="margin-top:0; color:#f1f5f9; font-size:1.1rem; text-align:center;">機台平均電力消耗 (W)</h3>
+            <div style="position:relative; height:280px; width:100%;">
+                <canvas id="energyChart"></canvas>
+            </div>
+        </div>
+        <div style="flex:1; min-width:300px; background:#1e293b; padding:1.5rem; border-radius:10px; border:1px solid #334155; height:350px;">
+            <h3 style="margin-top:0; color:#f1f5f9; font-size:1.1rem; text-align:center;">機台平均氣壓消耗 (L/min)</h3>
+            <div style="position:relative; height:280px; width:100%;">
+                <canvas id="airChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="mes-section-title">最近生產工單 (Recent Orders)</div>
+    <div class="mes-table-container">
+        <table class="mes-table">
+            <thead>
+                <tr>
+                    <th>工單編號 (ONo)</th>
+                    <th>狀態 (State)</th>
+                    <th>預計開始</th>
+                    <th>預計結束</th>
+                    <th>實際開始</th>
+                    <th>實際結束</th>
+                </tr>
+            </thead>
+            <tbody id="orders-tbody">
+                <tr><td colspan="6" style="text-align:center; color:#64748b;">載入中...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    let energyChartInstance = null;
+    let airChartInstance = null;
+
+    async function fetchMesAnalytics() {
+        try {
+            const res = await fetch("/factory/api/mes_analytics");
+            if (!res.ok) return;
+            const data = await res.json();
+            
+            if(data.error) return;
+
+            // Chart.js 全局文字顏色設定
+            Chart.defaults.color = '#94a3b8';
+            Chart.defaults.borderColor = 'rgba(255, 255, 255, 0.1)';
+
+            // Render Energy Chart
+            const ctxEnergy = document.getElementById('energyChart').getContext('2d');
+            if (energyChartInstance) energyChartInstance.destroy();
+            energyChartInstance = new Chart(ctxEnergy, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: '電力消耗 (W)',
+                        data: data.energy,
+                        backgroundColor: 'rgba(56, 189, 248, 0.6)',
+                        borderColor: 'rgba(56, 189, 248, 1)',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+
+            // Render Air Chart
+            const ctxAir = document.getElementById('airChart').getContext('2d');
+            if (airChartInstance) airChartInstance.destroy();
+            airChartInstance = new Chart(ctxAir, {
+                type: 'bar',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        label: '氣壓消耗 (L/min)',
+                        data: data.air,
+                        backgroundColor: 'rgba(16, 185, 129, 0.6)',
+                        borderColor: 'rgba(16, 185, 129, 1)',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+
+        } catch(error) {
+            console.error("Fetch analytics error:", error);
+        }
+    }
+
+    async function fetchMesStatus() {
+        try {
+            const res = await fetch("/factory/api/mes_status");
+            const statusBadge = document.getElementById("connection-status");
+            
+            if (!res.ok) {
+                throw new Error("API responded with status " + res.status);
+            }
+            
+            const data = await res.json();
+            
+            if(data.error) {
+                 throw new Error(data.error);
+            }
+
+            statusBadge.className = "mes-status-badge";
+            statusBadge.innerHTML = `<div class="mes-pulse"></div> 即時連線 (最後更新: ${data.now})`;
+
+            // 渲染機台卡片
+            const grid = document.getElementById("machines-grid");
+            if (data.machines && data.machines.length > 0) {
+                grid.innerHTML = data.machines.map(m => {
+                    let stateClass = "state-idle";
+                    let stateText = "閒置";
+                    
+                    if (m.ErrorL0) {
+                        stateClass = "state-error";
+                        stateText = "異常 (Error)";
+                    } else if (m.Busy) {
+                        stateClass = "state-running";
+                        stateText = "運作中 (Busy)";
+                    } else if (m.AutomaticMode) {
+                        stateClass = "state-running";
+                        stateText = "自動模式待命";
+                    } else if (m.ManualMode) {
+                        stateClass = "state-manual";
+                        stateText = "手動模式";
+                    }
+
+                    return `
+                        <div class="mes-card">
+                            <div class="glass-glow"></div>
+                            <div class="mes-card-header">
+                                <h3 class="mes-card-title">${m.ResourceName || '未命名機台'} <span style="font-size:0.8rem;color:#64748b;font-weight:normal;">#${m.ResourceID}</span></h3>
+                                <span class="mes-machine-state ${stateClass}">${stateText}</span>
+                            </div>
+                            <div class="mes-card-body">
+                                <div class="mes-stat">
+                                    <span class="mes-stat-label">自動模式</span>
+                                    <span class="mes-stat-value" style="color:${m.AutomaticMode ? '#10b981' : '#64748b'}">${m.AutomaticMode ? 'ON' : 'OFF'}</span>
+                                </div>
+                                <div class="mes-stat">
+                                    <span class="mes-stat-label">手動模式</span>
+                                    <span class="mes-stat-value" style="color:${m.ManualMode ? '#f59e0b' : '#64748b'}">${m.ManualMode ? 'ON' : 'OFF'}</span>
+                                </div>
+                                <div class="mes-stat">
+                                    <span class="mes-stat-label">異常燈號 (ErrorL0)</span>
+                                    <span class="mes-stat-value" style="color:${m.ErrorL0 ? '#ef4444' : '#10b981'}">${m.ErrorL0 ? 'TRUE' : 'FALSE'}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join("");
+            } else {
+                grid.innerHTML = `<div style="color: #64748b; padding: 2rem; grid-column: 1 / -1; text-align: center;">查無機台資料</div>`;
+            }
+
+            // 渲染訂單表格
+            const tbody = document.getElementById("orders-tbody");
+            if (data.orders && data.orders.length > 0) {
+                tbody.innerHTML = data.orders.map(o => {
+                    let stateColor = o.State === 4 ? '#10b981' : (o.State === 2 ? '#38bdf8' : '#94a3b8'); // 假設 4 是完成，2 是處理中
+                    return `
+                        <tr>
+                            <td style="font-family:monospace;font-weight:bold;">${o.ONo}</td>
+                            <td><span style="color:${stateColor}">${o.State}</span></td>
+                            <td class="mes-stat-label">${o.PlanedStart || '-'}</td>
+                            <td class="mes-stat-label">${o.PlanedEnd || '-'}</td>
+                            <td>${o.Start || '-'}</td>
+                            <td>${o.End || '-'}</td>
+                        </tr>
+                    `;
+                }).join("");
+            } else {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#64748b;">查無訂單資料</td></tr>`;
+            }
+
+        } catch (error) {
+            console.error("Fetch MES error:", error);
+            const statusBadge = document.getElementById("connection-status");
+            statusBadge.className = "mes-status-badge error";
+            statusBadge.innerHTML = `❌ 連線失敗`;
+            
+            // 將錯誤訊息顯示在畫面上
+            document.getElementById("machines-grid").innerHTML = `<div style="color: #ef4444; padding: 2rem; grid-column: 1 / -1; text-align: center; border: 1px solid #ef4444; border-radius: 8px; background: rgba(239, 68, 68, 0.1);">
+                <h3>讀取機台資料失敗</h3>
+                <p>${error.message}</p>
+                <p style="font-size: 0.9em; color: #f8fafc; margin-top: 1rem;">提示：請確認您的 Access 資料庫 (FestoMES.accdb) 沒有被其他程式（如 MS Access）獨佔開啟。</p>
+            </div>`;
+            document.getElementById("orders-tbody").innerHTML = `<tr><td colspan="6" style="text-align:center; color:#ef4444;">連線失敗</td></tr>`;
+        }
+    }
+
+    // 初次載入
+    fetchMesStatus();
+    fetchMesAnalytics();
+    
+    // 每 5 秒自動更新狀態 (圖表不需要頻繁更新，可以設長一點，這裡先一起)
+    setInterval(() => {
+        fetchMesStatus();
+    }, 5000);
+</script>
+{% endblock %}

@@ -17,6 +17,7 @@ import time
 
 from . import login_required
 from .db import get_product_db, get_order_mgmt_db
+import sqlite3
 
 order_bp = Blueprint("order", __name__)
 
@@ -344,6 +345,30 @@ def submit_order_api():
 
         conn_prod.commit()
         conn_order.commit()
+
+        # --- 新增：將訂單同步寫入 FestoMES.accdb ---
+        try:
+            from core.db import get_festo_db
+            conn_festo = get_festo_db()
+            cur_festo = conn_festo.cursor()
+            
+            # 取得目前的 MAX ONo
+            cur_festo.execute("SELECT MAX(ONo) FROM tblOrder")
+            max_row = cur_festo.fetchone()
+            max_ono = max_row[0] if max_row and max_row[0] is not None else 0
+            new_ono = max_ono + 1
+            
+            # 寫入 tblOrder (State=1, Enabled=True)
+            cur_festo.execute("""
+                INSERT INTO tblOrder (ONo, PlanedStart, PlanedEnd, Start, End, CNo, State, Enabled, Release)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (new_ono, datetime.now(), estimated_delivery_dt, None, None, 1, 1, True, datetime.now()))
+            
+            conn_festo.commit()
+            conn_festo.close()
+        except Exception as e:
+            print(f"Warning: Failed to sync order to FestoMES.accdb: {e}")
+            # 如果連線失敗不中斷原本的下單流程
 
         session.pop("current_order_items", None)
 
