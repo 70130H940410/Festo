@@ -252,7 +252,7 @@
 
     async function fetchMesAnalytics() {
         try {
-            const res = await fetch("/factory/api/mes_analytics");
+            const res = await fetch("/factory/api/mes_analytics?_t=" + Date.now());
             if (!res.ok) return;
             const data = await res.json();
             
@@ -317,16 +317,22 @@
 
     async function fetchMesStatus() {
         try {
-            const res = await fetch("/factory/api/mes_status");
+            const res = await fetch("/factory/api/mes_status?_t=" + Date.now());
             const statusBadge = document.getElementById("connection-status");
             
-            if (!res.ok) {
-                throw new Error("API responded with status " + res.status);
+            let data = null;
+            try {
+                data = await res.json();
+            } catch (e) {
+                // Ignore JSON parse error if response is not JSON
             }
             
-            const data = await res.json();
+            if (!res.ok) {
+                const errMsg = (data && data.error) ? data.error : ("API responded with status " + res.status);
+                throw new Error(errMsg);
+            }
             
-            if(data.error) {
+            if (data && data.error) {
                  throw new Error(data.error);
             }
 

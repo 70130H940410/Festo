@@ -8,7 +8,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 USER_DB_PATH = os.path.join(BASE_DIR, "database", "User_Data.db")
 PRODUCT_DB_PATH = os.path.join(BASE_DIR, "database", "product.db")
 ORDER_MGMT_DB_PATH = os.path.join(BASE_DIR, "database", "order_management.db")
-FESTO_DB_PATH = os.path.join(BASE_DIR, "database", "FestoMES.accdb")
+FESTO_DB_PATH = os.environ.get("FESTO_DB_PATH", os.path.join(BASE_DIR, "database", "FestoMES.accdb"))
 
 
 def get_user_db():
