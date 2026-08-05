@@ -30,9 +30,15 @@ def get_order_mgmt_db():
     return conn
 
 
+import threading
+
+_festo_db_lock = threading.Lock()
+
 def get_festo_db():
-    """連線到真正的 FestoMES.accdb"""
+    """連線到真正的 FestoMES.accdb (帶有 Lock 保護)"""
     conn_str = r"Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=" + FESTO_DB_PATH + ";"
-    conn = pyodbc.connect(conn_str)
+    # pyodbc 對 Access DB 的連線需適當開關
+    conn = pyodbc.connect(conn_str, autocommit=True)
     return conn
+
 

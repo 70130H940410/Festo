@@ -376,7 +376,7 @@ def submit_order_api():
             {
                 "success": True,
                 "message": "下單成功，請進行付款！",
-                "redirect_url": url_for("order.order_history"),
+                "redirect_url": url_for("order.order_history", tab="pending_payment"),
             }
         )
 

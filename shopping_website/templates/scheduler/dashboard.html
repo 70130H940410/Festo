@@ -1,0 +1,534 @@
+{% extends "base.html" %}
+{% block title %}排程儀表板 — Festo CP Factory{% endblock %}
+
+{% block extra_head %}
+<style>
+  /* ── 全域 ── */
+  .scheduler-page { padding: 1rem 2rem 3rem; max-width: 1600px; margin: 0 auto; }
+  .scheduler-page h1 { font-size: 1.6rem; margin-bottom: .6rem; }
+
+  /* ── 控制列 ── */
+  .control-bar {
+    display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;
+    background: var(--card-bg, #1e293b); padding: .8rem 1.2rem; border-radius: 12px;
+    margin-bottom: 1.2rem; box-shadow: 0 2px 12px rgba(0,0,0,.25);
+  }
+  .control-bar label { font-size: .85rem; color: #94a3b8; }
+  .control-bar select, .control-bar button {
+    padding: .45rem .8rem; border-radius: 8px; border: 1px solid #334155;
+    background: #0f172a; color: #e2e8f0; font-size: .85rem; cursor: pointer;
+    transition: all .2s;
+  }
+  .control-bar select:hover, .control-bar button:hover {
+    border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,.25);
+  }
+  .btn-primary { background: #6366f1 !important; border-color: #6366f1 !important; font-weight: 600; }
+  .btn-primary:hover { background: #4f46e5 !important; }
+
+  /* ── 統計卡片 ── */
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 1rem; margin-bottom: 1.2rem; }
+  .stat-card {
+    background: var(--card-bg, #1e293b); border-radius: 12px; padding: 1rem 1.2rem;
+    box-shadow: 0 2px 12px rgba(0,0,0,.2); text-align: center;
+  }
+  .stat-card .label { font-size: .75rem; color: #94a3b8; text-transform: uppercase; letter-spacing: .05em; }
+  .stat-card .value { font-size: 1.6rem; font-weight: 700; color: #e2e8f0; margin: .3rem 0; }
+  .stat-card .sub { font-size: .75rem; color: #64748b; }
+  .stat-card.bottleneck .value { color: #f87171; }
+
+  /* ── 甘特圖容器 ── */
+  .gantt-section { margin-bottom: 1.5rem; }
+  .gantt-section h2 { font-size: 1.1rem; margin-bottom: .5rem; color: #cbd5e1; }
+  .gantt-container {
+    background: var(--card-bg, #1e293b); border-radius: 12px; padding: 1rem;
+    overflow-x: auto; box-shadow: 0 2px 12px rgba(0,0,0,.25); min-height: 300px;
+    position: relative;
+  }
+  .gantt-canvas { width: 100%; min-height: 280px; display: block; }
+
+  /* ── 負載圖 & 排隊面板 ── */
+  .bottom-panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; }
+  @media(max-width:960px){ .bottom-panels{ grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--card-bg, #1e293b); border-radius: 12px; padding: 1rem 1.2rem;
+    box-shadow: 0 2px 12px rgba(0,0,0,.25);
+  }
+  .panel h3 { font-size: .95rem; color: #cbd5e1; margin-bottom: .7rem; }
+
+  /* 負載條 */
+  .load-bar-row { display: flex; align-items: center; gap: .5rem; margin-bottom: .5rem; }
+  .load-bar-label { width: 160px; font-size: .78rem; color: #94a3b8; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .load-bar-track { flex: 1; height: 22px; background: #0f172a; border-radius: 6px; overflow: hidden; position: relative; }
+  .load-bar-fill { height: 100%; border-radius: 6px; transition: width .6s ease; display: flex; align-items: center; justify-content: flex-end; padding-right: 6px; font-size: .7rem; color: #fff; font-weight: 600; }
+  .load-bar-fill.low { background: linear-gradient(90deg, #22c55e, #4ade80); }
+  .load-bar-fill.mid { background: linear-gradient(90deg, #eab308, #facc15); }
+  .load-bar-fill.high { background: linear-gradient(90deg, #ef4444, #f87171); }
+
+  /* 訂單列表 */
+  .order-queue-item {
+    display: flex; flex-direction: column; gap: .2rem;
+    padding: .65rem .85rem; border-radius: 8px; margin-bottom: .45rem;
+    background: #0f172a; cursor: grab; transition: all .25s ease;
+    border-left: 4px solid #6366f1; position: relative;
+  }
+  .order-queue-item:hover {
+    background: #1e293b; transform: translateX(4px);
+    box-shadow: 0 4px 14px rgba(99,102,241,.25);
+  }
+  .order-queue-item.dragging { opacity: .4; }
+  .order-queue-header { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+  .order-queue-item .idx { color: #64748b; font-size: .78rem; width: 18px; font-weight: bold; }
+  .order-queue-item .customer { font-weight: 700; font-size: .88rem; color: #f8fafc; }
+  .order-queue-item .oid { font-size: .78rem; color: #94a3b8; font-family: monospace; }
+  .order-queue-hover-info {
+    max-height: 0; opacity: 0; overflow: hidden;
+    transition: max-height .35s ease, opacity .35s ease, margin-top .35s ease, padding-top .35s ease;
+    font-size: .76rem; color: #cbd5e1; border-top: 1px dashed #334155;
+    padding-top: 0; margin-top: 0; line-height: 1.6;
+  }
+  .order-queue-item:hover .order-queue-hover-info {
+    max-height: 140px; opacity: 1; margin-top: .4rem; padding-top: .4rem;
+  }
+
+
+  /* 演算法比較 */
+  .algo-compare { margin-top: 1rem; }
+  .algo-compare table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  .algo-compare th { text-align: left; padding: .4rem .6rem; color: #94a3b8; border-bottom: 1px solid #334155; }
+  .algo-compare td { padding: .4rem .6rem; color: #e2e8f0; border-bottom: 1px solid #1e293b; }
+  .algo-compare tr.best td { color: #4ade80; font-weight: 600; }
+
+  /* Loading */
+  .loading-overlay {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(15,23,42,.8); border-radius: 12px; z-index: 10;
+  }
+  .spinner { width: 36px; height: 36px; border: 3px solid #334155; border-top-color: #6366f1; border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hidden { display: none !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="scheduler-page">
+  <h1>📊 排程儀表板</h1>
+
+  <!-- 控制列 -->
+  <div class="control-bar">
+    <label>排程演算法</label>
+    <select id="algo-select">
+      <option value="fcfs">FCFS — 先到先做</option>
+      <option value="spt">SPT — 最短加工優先</option>
+      <option value="edd">EDD — 最早交期優先</option>
+      <option value="weighted">Weighted — 加權複合</option>
+    </select>
+    <button class="btn-primary" onclick="loadSchedule()">▶ 執行排程</button>
+    <button onclick="compareAlgorithms()">⚖ 比較所有演算法</button>
+    <button onclick="loadSchedule()">🔄 重新整理</button>
+  </div>
+
+  <!-- 統計卡片 -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="label">排程訂單數</div>
+      <div class="value" id="stat-orders">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">總工期</div>
+      <div class="value" id="stat-makespan">-</div>
+      <div class="sub" id="stat-makespan-sec"></div>
+    </div>
+    <div class="stat-card bottleneck">
+      <div class="label">🔴 瓶頸站</div>
+      <div class="value" id="stat-bottleneck">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">使用演算法</div>
+      <div class="value" id="stat-algo">FCFS</div>
+    </div>
+  </div>
+
+  <!-- 甘特圖 -->
+  <div class="gantt-section">
+    <h2>甘特圖 — 工站排程時間軸</h2>
+    <div class="gantt-container" id="gantt-wrapper">
+      <div class="loading-overlay hidden" id="gantt-loading"><div class="spinner"></div></div>
+      <canvas class="gantt-canvas" id="gantt-canvas"></canvas>
+    </div>
+  </div>
+
+  <!-- 下方面板 -->
+  <div class="bottom-panels">
+    <!-- 產能負載圖 -->
+    <div class="panel">
+      <h3>📈 工站產能負載</h3>
+      <div id="station-load-container"></div>
+    </div>
+
+    <!-- 訂單排隊面板 -->
+    <div class="panel">
+      <h3>📋 訂單排隊順序 <span style="font-size:.7rem;color:#64748b">(可拖拉排序)</span></h3>
+      <div id="order-queue-container"></div>
+      <button class="btn-primary" style="margin-top:.8rem;width:100%" onclick="saveOrder()">💾 儲存排序</button>
+      <div class="algo-compare" id="algo-compare-section" style="display:none">
+        <h3>⚖ 演算法比較</h3>
+        <table id="algo-compare-table"></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 全域狀態 ──
+let currentTasks = [];
+let currentOrderSequence = [];
+let currentOrdersDetails = {};
+const COLORS = [
+  '#6366f1','#ec4899','#14b8a6','#f59e0b','#8b5cf6',
+  '#06b6d4','#f43f5e','#22c55e','#e879f9','#fb923c',
+];
+
+// ── 甘特圖繪製 ──
+function drawGantt(tasks) {
+  const canvas = document.getElementById('gantt-canvas');
+  const ctx = canvas.getContext('2d');
+  const container = document.getElementById('gantt-wrapper');
+  const dpr = window.devicePixelRatio || 1;
+
+  if (!tasks.length) {
+    canvas.width = container.clientWidth * dpr;
+    canvas.height = 200 * dpr;
+    canvas.style.width = container.clientWidth + 'px';
+    canvas.style.height = '200px';
+    ctx.scale(dpr, dpr);
+    ctx.fillStyle = '#64748b';
+    ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('尚無排程數據，請先點擊「執行排程」', container.clientWidth / 2, 100);
+    return;
+  }
+
+  // 收集所有工站
+  const stationSet = new Map();
+  tasks.forEach(t => { if (!stationSet.has(t.resource_id)) stationSet.set(t.resource_id, t.station_name); });
+  const stations = Array.from(stationSet.entries()); // [[id, name], ...]
+
+  // 時間範圍
+  const allStarts = tasks.map(t => new Date(t.planned_start).getTime());
+  const allEnds = tasks.map(t => new Date(t.planned_end).getTime());
+  const minTime = Math.min(...allStarts);
+  const maxTime = Math.max(...allEnds);
+  const timeSpan = maxTime - minTime || 1;
+
+  // 布局
+  const leftMargin = 180;
+  const rightMargin = 30;
+  const topMargin = 40;
+  const rowH = 36;
+  const rowGap = 4;
+  const chartW = Math.max(container.clientWidth, 800);
+  const chartH = topMargin + stations.length * (rowH + rowGap) + 40;
+  const barArea = chartW - leftMargin - rightMargin;
+
+  canvas.width = chartW * dpr;
+  canvas.height = chartH * dpr;
+  canvas.style.width = chartW + 'px';
+  canvas.style.height = chartH + 'px';
+  ctx.scale(dpr, dpr);
+
+  // 背景
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, chartW, chartH);
+
+  // 時間軸刻度
+  const tickCount = 8;
+  ctx.fillStyle = '#475569';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'center';
+  for (let i = 0; i <= tickCount; i++) {
+    const x = leftMargin + (barArea * i / tickCount);
+    const t = new Date(minTime + timeSpan * i / tickCount);
+    const label = t.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    ctx.fillText(label, x, topMargin - 8);
+    ctx.strokeStyle = '#1e293b';
+    ctx.beginPath(); ctx.moveTo(x, topMargin); ctx.lineTo(x, chartH - 20); ctx.stroke();
+  }
+
+  // 顏色映射 (order_id → color)
+  const orderIds = [...new Set(tasks.map(t => t.order_id))];
+  const colorMap = {};
+  orderIds.forEach((oid, i) => { colorMap[oid] = COLORS[i % COLORS.length]; });
+
+  // 繪製每行
+  stations.forEach(([resId, name], rowIdx) => {
+    const y = topMargin + rowIdx * (rowH + rowGap);
+
+    // 站名
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(name, leftMargin - 10, y + rowH / 2 + 4);
+
+    // 行背景
+    ctx.fillStyle = rowIdx % 2 === 0 ? '#1e293b' : '#172032';
+    ctx.fillRect(leftMargin, y, barArea, rowH);
+
+    // 該站的 tasks
+    const stationTasks = tasks.filter(t => t.resource_id === resId);
+    stationTasks.forEach(t => {
+      const tStart = new Date(t.planned_start).getTime();
+      const tEnd = new Date(t.planned_end).getTime();
+      const x1 = leftMargin + ((tStart - minTime) / timeSpan) * barArea;
+      const w = Math.max(((tEnd - tStart) / timeSpan) * barArea, 3);
+
+      // 色塊
+      ctx.fillStyle = colorMap[t.order_id] || '#6366f1';
+      ctx.globalAlpha = 0.85;
+      const r = 4;
+      ctx.beginPath();
+      ctx.moveTo(x1 + r, y + 3);
+      ctx.lineTo(x1 + w - r, y + 3);
+      ctx.quadraticCurveTo(x1 + w, y + 3, x1 + w, y + 3 + r);
+      ctx.lineTo(x1 + w, y + rowH - 3 - r);
+      ctx.quadraticCurveTo(x1 + w, y + rowH - 3, x1 + w - r, y + rowH - 3);
+      ctx.lineTo(x1 + r, y + rowH - 3);
+      ctx.quadraticCurveTo(x1, y + rowH - 3, x1, y + rowH - 3 - r);
+      ctx.lineTo(x1, y + 3 + r);
+      ctx.quadraticCurveTo(x1, y + 3, x1 + r, y + 3);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      // 文字
+      if (w > 40) {
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`P${t.piece_no}`, x1 + w / 2, y + rowH / 2 + 3);
+      }
+    });
+  });
+
+  // 圖例
+  const legendY = chartH - 18;
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left';
+  let legendX = leftMargin;
+  orderIds.forEach((oid, i) => {
+    ctx.fillStyle = colorMap[oid];
+    ctx.fillRect(legendX, legendY - 8, 12, 12);
+    ctx.fillStyle = '#94a3b8';
+    const short = oid.length > 10 ? '...' + oid.slice(-6) : oid;
+    ctx.fillText(short, legendX + 16, legendY + 2);
+    legendX += 100;
+  });
+}
+
+// ── 負載圖 ──
+function renderStationLoad(stations) {
+  const c = document.getElementById('station-load-container');
+  if (!stations || !stations.length) { c.innerHTML = '<p style="color:#64748b">無資料</p>'; return; }
+  c.innerHTML = stations.map(s => {
+    const pct = s.utilization;
+    const cls = pct > 80 ? 'high' : pct > 50 ? 'mid' : 'low';
+    return `<div class="load-bar-row">
+      <div class="load-bar-label">${s.station_name}</div>
+      <div class="load-bar-track">
+        <div class="load-bar-fill ${cls}" style="width:${Math.max(pct,2)}%">${pct}%</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+
+
+// ── 訂單排隊 ──
+function renderOrderQueue(orders, detailsMap) {
+  const c = document.getElementById('order-queue-container');
+  if (!orders || !orders.length) { c.innerHTML = '<p style="color:#64748b">無待排訂單</p>'; return; }
+  const details = detailsMap || currentOrdersDetails || {};
+
+  c.innerHTML = orders.map((oid, i) => {
+    const info = details[oid] || {};
+    const cust = info.customer_name || '下單者';
+    const prod = info.product_name || '客製商品';
+    const price = info.total_price !== undefined ? info.total_price : 0;
+    const amount = info.amount || 1;
+    const note = info.note || '無備註';
+    const totalTime = info.total_working_time || 0;
+    const date = info.created_at || '';
+
+    let statusBadge = '';
+    if (info.status === 'pending_payment') {
+      statusBadge = '<span class="badge" style="background:#eab308;color:#000;font-size:.65rem;padding:2px 7px;border-radius:4px;margin-left:auto;font-weight:600">等待付款</span>';
+    } else if (info.status === 'active') {
+      statusBadge = '<span class="badge" style="background:#22c55e;color:#fff;font-size:.65rem;padding:2px 7px;border-radius:4px;margin-left:auto;font-weight:600">處理中</span>';
+    }
+
+    return `
+    <div class="order-queue-item" draggable="true" data-oid="${oid}"
+         ondragstart="dragStart(event)" ondragover="dragOver(event)" ondrop="dropItem(event)">
+      <div class="order-queue-header">
+        <span class="idx">${i+1}</span>
+        <span class="customer">${cust}</span>
+        <span class="oid">(${oid})</span>
+        ${statusBadge}
+      </div>
+      <div class="order-queue-hover-info">
+        <div>🛒 商品：<strong>${prod}</strong> (共 ${amount} 件)</div>
+        <div>💰 金額：<span style="color:#f43f5e;font-weight:bold">$${price}</span> | ⏱️ 單件時間：${totalTime} 秒</div>
+        <div>📅 時間：${date || '無紀錄'}</div>
+        ${note && note !== '無備註' ? `<div>📝 備註：<span style="color:#fbbf24">${note}</span></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── 拖拉排序 ──
+let dragSrc = null;
+function dragStart(e) { dragSrc = e.target.closest('.order-queue-item'); e.dataTransfer.effectAllowed = 'move'; dragSrc.classList.add('dragging'); }
+function dragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+function dropItem(e) {
+  e.preventDefault();
+  const target = e.target.closest('.order-queue-item');
+  if (!target || target === dragSrc) return;
+  const parent = target.parentNode;
+  const all = [...parent.querySelectorAll('.order-queue-item')];
+  const fromIdx = all.indexOf(dragSrc);
+  const toIdx = all.indexOf(target);
+  if (fromIdx < toIdx) target.after(dragSrc);
+  else target.before(dragSrc);
+  dragSrc.classList.remove('dragging');
+  // 更新序號
+  parent.querySelectorAll('.order-queue-item').forEach((el, i) => {
+    const idxEl = el.querySelector('.idx');
+    if (idxEl) idxEl.textContent = i + 1;
+  });
+  // 更新全域順序
+  currentOrderSequence = [...parent.querySelectorAll('.order-queue-item')].map(el => el.dataset.oid);
+}
+
+// ── 安全 API 請求 ──
+async function fetchJson(url) {
+  const r = await fetch(url);
+  if (r.redirected || r.status === 401 || r.status === 403) {
+    window.location.href = '/login';
+    throw new Error('Session 已過期或權限不足，請重新登入');
+  }
+  if (!r.ok) {
+    throw new Error(`伺服器回應錯誤 (${r.status})`);
+  }
+  const text = await r.text();
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    if (text.includes('<!DOCTYPE') || text.includes('<html')) {
+      window.location.href = '/login';
+      throw new Error('Session 已過期，重新導向中...');
+    }
+    throw new Error('回應資料格式不正確');
+  }
+}
+
+// ── API 呼叫 ──
+async function loadSchedule() {
+  const algoEl = document.getElementById('algo-select');
+  const algo = algoEl ? algoEl.value : 'fcfs';
+  const loadingEl = document.getElementById('gantt-loading');
+  if (loadingEl) loadingEl.classList.remove('hidden');
+
+  const statAlgoEl = document.getElementById('stat-algo');
+  if (statAlgoEl) statAlgoEl.textContent = algo.toUpperCase();
+
+  try {
+    const [ganttRes, loadRes] = await Promise.all([
+      fetchJson(`/scheduler/api/gantt_data?algorithm=${algo}`),
+      fetchJson(`/scheduler/api/station_load?algorithm=${algo}`),
+    ]);
+
+    if (ganttRes.error) throw new Error(ganttRes.error);
+    if (loadRes.error) throw new Error(loadRes.error);
+
+    currentTasks = ganttRes.tasks || [];
+    currentOrderSequence = ganttRes.order_sequence || [];
+    currentOrdersDetails = ganttRes.orders_details || {};
+
+    // 統計
+    document.getElementById('stat-orders').textContent = currentOrderSequence.length;
+    const ms = ganttRes.total_makespan_sec || 0;
+    const min = Math.floor(ms / 60); const sec = ms % 60;
+    document.getElementById('stat-makespan').textContent = `${min}分${sec}秒`;
+    document.getElementById('stat-makespan-sec').textContent = `${ms} 秒`;
+    
+    // 瓶頸站
+    const bnStation = (loadRes.stations || []).find(s => s.resource_id === ganttRes.bottleneck_station);
+    document.getElementById('stat-bottleneck').textContent = bnStation ? bnStation.station_name : '-';
+
+    drawGantt(currentTasks);
+    renderStationLoad(loadRes.stations || []);
+    renderOrderQueue(currentOrderSequence, currentOrdersDetails);
+  } catch(e) {
+    console.error('排程載入失敗:', e);
+    const canvas = document.getElementById('gantt-canvas');
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#ef4444';
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('載入失敗：' + e.message, canvas.width / 4, 100);
+    }
+  } finally {
+    if (loadingEl) loadingEl.classList.add('hidden');
+  }
+}
+
+async function saveOrder() {
+  const items = document.querySelectorAll('#order-queue-container .order-queue-item');
+  const seq = [...items].map(el => el.dataset.oid);
+  try {
+    const res = await fetch('/scheduler/api/reorder', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({order_sequence: seq})
+    });
+    const data = await res.json();
+    if (data.ok) { alert('排序已儲存！重新排程中...'); loadSchedule(); }
+    else alert('儲存失敗: ' + (data.error || ''));
+  } catch(e) { alert('儲存失敗: ' + e); }
+}
+
+async function compareAlgorithms() {
+  try {
+    const res = await fetch('/scheduler/api/compare_algorithms').then(r => r.json());
+    const section = document.getElementById('algo-compare-section');
+    const table = document.getElementById('algo-compare-table');
+    section.style.display = 'block';
+
+    const rows = res.comparison || [];
+    const best = rows.reduce((a, b) => a.total_makespan_sec < b.total_makespan_sec ? a : b, rows[0]);
+
+    const nameMap = {fcfs:'FCFS 先到先做', spt:'SPT 最短優先', edd:'EDD 最早交期', weighted:'Weighted 加權'};
+    table.innerHTML = `
+      <tr><th>演算法</th><th>總工期</th><th>訂單數</th></tr>
+      ${rows.map(r => {
+        const isBest = r.algorithm === best.algorithm;
+        const m = Math.floor(r.total_makespan_sec/60); const s = r.total_makespan_sec%60;
+        return `<tr class="${isBest?'best':''}">
+          <td>${nameMap[r.algorithm]||r.algorithm} ${isBest?'⭐':''}</td>
+          <td>${m}分${s}秒</td>
+          <td>${(r.order_sequence||[]).length}</td>
+        </tr>`;
+      }).join('')}
+    `;
+  } catch(e) { console.error(e); }
+}
+
+// 初始載入（相容已處於 complete/interactive 狀態的 DOM）
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', loadSchedule);
+} else {
+  loadSchedule();
+}
+window.addEventListener('resize', () => { if (currentTasks.length) drawGantt(currentTasks); });
+</script>
+{% endblock %}

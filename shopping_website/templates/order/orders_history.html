@@ -127,10 +127,21 @@
 </div>
 
 <script>
+document.addEventListener('DOMContentLoaded', function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get('tab');
+    if (tabParam) {
+        const targetBtn = document.querySelector(`.tab-btn[onclick*="${tabParam}"]`);
+        if (targetBtn) {
+            filterOrders(tabParam, targetBtn);
+        }
+    }
+});
+
 function filterOrders(status, btnElement) {
     // Update tabs
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-    btnElement.classList.add('active');
+    if (btnElement) btnElement.classList.add('active');
     
     // Update cards
     const cards = document.querySelectorAll('.order-card');
@@ -167,7 +178,8 @@ function payOrder(orderId) {
     .then(r => r.json())
     .then(data => {
         if (data.success) {
-            window.location.reload();
+            alert(data.message || "付款成功！");
+            window.location.href = "/orders?tab=active";
         } else {
             alert("付款失敗：" + data.message);
         }

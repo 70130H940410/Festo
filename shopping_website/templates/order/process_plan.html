@@ -82,7 +82,7 @@
     
     <!-- 按鈕觸發 JS submitOrder() -->
     <button type="button" id="submitBtn" class="btn btn-primary btn-lg" onclick="submitOrder()">
-      下訂單並前往工廠運作模擬 (Demo)
+      點擊前往付費
     </button>
   </div>
 </div>
@@ -125,14 +125,14 @@ function submitOrder() {
             // 失敗：顯示錯誤訊息
             alert("下單失敗：" + data.message);
             btn.disabled = false;
-            btn.innerText = "下訂單並前往工廠運作模擬 (Demo)";
+            btn.innerText = "點擊前往付費";
         }
     })
     .catch(error => {
         console.error("Error:", error);
         alert("系統發生錯誤，請稍後再試。");
         btn.disabled = false;
-        btn.innerText = "下訂單並前往工廠運作模擬 (Demo)";
+        btn.innerText = "點擊前往付費";
     });
 }
 </script>
