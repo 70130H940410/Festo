@@ -87,6 +87,183 @@
   <!-- JS（順序：loader -> modal -> page scripts） -->
   <script src="{{ url_for('static', filename='js/loader.js') }}"></script>
   <script src="{{ url_for('static', filename='js/modal.js') }}"></script>
+
+  {% if session.get('role') == 'admin' %}
+  <!-- ===== MES Machine Error Alert Modal (僅管理者頁面會載入與跳出) ===== -->
+  <div id="mesAlertModalBackdrop" class="app-modal-backdrop" aria-hidden="true" onclick="onMesModalBackdropClick(event)" style="display:none; z-index: 99999; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); position: fixed; inset: 0; align-items: center; justify-content: center; padding: 1rem;">
+    <div class="app-modal" onclick="event.stopPropagation()" style="max-width: 560px; width: 94%; max-height: 88vh; display: flex; flex-direction: column; border: 2px solid #ef4444; border-radius: 12px; overflow: hidden; background: #ffffff; box-shadow: 0 20px 40px rgba(239, 68, 68, 0.4); animation: popIn 0.3s ease-out; position: relative;">
+      <div class="app-modal__header" style="background: linear-gradient(135deg, #b91c1c, #dc2626); color: #ffffff; padding: 0.9rem 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;">
+        <div class="app-modal__title" style="font-weight: 700; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem; margin: 0;">
+          <span>🚨 Festo MES 機台異常告警</span>
+          <span style="font-size: 0.72rem; background: #fef2f2; color: #991b1b; padding: 3px 8px; border-radius: 50px; font-weight: bold;">Access DB Error 變數</span>
+        </div>
+        <button type="button" onclick="closeMesAlertModal()" title="關閉視窗 (Esc)" style="color: #ffffff; font-size: 1.6rem; background: none; border: none; cursor: pointer; line-height: 1; padding: 0 4px;">×</button>
+      </div>
+
+      <div class="app-modal__body" id="mesAlertModalBody" style="padding: 1.25rem; font-size: 0.95rem; line-height: 1.6; color: #1e293b; overflow-y: auto; flex: 1;">
+        <!-- 動態填入警示內容 -->
+      </div>
+
+      <div class="app-modal__actions" style="padding: 0.85rem 1.25rem; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; gap: 0.6rem; justify-content: flex-end; align-items: center; flex-wrap: wrap; flex-shrink: 0;">
+        <button type="button" class="btn btn-secondary" onclick="resolveMesErrorInDb()" id="btnResolveMesError" style="background: #16a34a; color: #fff; border: none; padding: 0.55rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 700; display: inline-flex; align-items: center; gap: 0.3rem;">
+          🛠️ 解除故障 (寫回 Access.db)
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="closeMesAlertModal(true)" style="background: #64748b; color: #fff; border: none; padding: 0.55rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 600;">
+          ✕ 關閉此通知
+        </button>
+        <a href="{{ url_for('factory.mes_dashboard') }}" class="btn btn-danger" style="background: #dc2626; color: #ffffff; text-decoration: none; padding: 0.55rem 1rem; border-radius: 6px; font-weight: 700; display: inline-flex; align-items: center; gap: 0.4rem; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);">
+          🏭 戰情室查看
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  let currentMesAlertKey = null;
+  let currentMesResourceId = null;
+
+  async function checkMesErrors() {
+    try {
+      const r = await fetch("{{ url_for('factory.api_mes_alerts') }}");
+      if (!r.ok) return;
+      const data = await r.json();
+
+      if (data.reset_dismiss) {
+        sessionStorage.clear();
+        localStorage.clear();
+      }
+
+      if (data.has_error && data.errors && data.errors.length > 0) {
+        const err = data.errors[0]; // 取得最新或急停異常
+        const alertKey = err.resource_id + '_' + err.timestamp + '_' + err.error_level;
+
+        // 若屬剛登入 (reset_dismiss) 或是當次 Session 未關閉，強制跳出
+        const isDismissed = !data.reset_dismiss && sessionStorage.getItem('dismissed_mes_alert_' + alertKey);
+
+        if (!isDismissed) {
+          showMesAlertModal(err, alertKey);
+        }
+      } else {
+        // 沒有異常時確保彈窗關閉
+        const modal = document.getElementById("mesAlertModalBackdrop");
+        if (modal && modal.style.display !== "none") {
+          modal.style.display = "none";
+        }
+      }
+    } catch(e) {
+      console.warn("[MES Alert] Check error:", e);
+    }
+  }
+
+  function showMesAlertModal(err, alertKey) {
+    const modal = document.getElementById("mesAlertModalBackdrop");
+    const body = document.getElementById("mesAlertModalBody");
+    if (!modal || !body) return;
+
+    currentMesAlertKey = alertKey;
+    currentMesResourceId = err.resource_id;
+
+    body.innerHTML = `
+      <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 0.85rem 1rem; border-radius: 6px; margin-bottom: 1rem;">
+        <div style="font-weight: 700; color: #991b1b; font-size: 1.05rem;">
+          ⚠️ 偵測到 Access DB 機台觸發 Error 變數！
+        </div>
+        <div style="color: #7f1d1d; font-size: 0.82rem; margin-top: 2px;">
+          資料庫來源：FestoMES.accdb ➔ tblMachineReport (ResourceID: ${err.resource_id})
+        </div>
+      </div>
+
+      <table style="width: 100%; border-collapse: collapse; font-size: 0.92rem;">
+        <tr style="border-bottom: 1px solid #f1f5f9;">
+          <td style="padding: 0.5rem 0; color: #64748b; width: 110px;">📍 故障工站：</td>
+          <td style="padding: 0.5rem 0; font-weight: 700; color: #0f172a; font-size: 1rem;">${err.resource_name}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #f1f5f9;">
+          <td style="padding: 0.5rem 0; color: #64748b;">⚠️ 異常變數：</td>
+          <td style="padding: 0.5rem 0;">
+            <span style="background:#fee2e2; color:#991b1b; border: 1px solid #fca5a5; padding: 2px 8px; border-radius: 4px; font-weight: 700; font-size: 0.82rem;">
+              ${err.error_level} = True
+            </span>
+          </td>
+        </tr>
+        <tr style="border-bottom: 1px solid #f1f5f9;">
+          <td style="padding: 0.5rem 0; color: #64748b; vertical-align: top;">🔍 原因說明：</td>
+          <td style="padding: 0.5rem 0; color: #b91c1c; font-weight: 700; line-height: 1.5;">${err.reason}</td>
+        </tr>
+        <tr>
+          <td style="padding: 0.5rem 0; color: #64748b;">🕒 發生時間：</td>
+          <td style="padding: 0.5rem 0; color: #475569; font-family: monospace; font-size: 0.88rem;">${err.timestamp}</td>
+        </tr>
+      </table>
+    `;
+
+    modal.style.display = "flex";
+    modal.setAttribute("aria-hidden", "false");
+  }
+
+  function closeMesAlertModal(persistent = true) {
+    const modal = document.getElementById("mesAlertModalBackdrop");
+    if (currentMesAlertKey && persistent) {
+      sessionStorage.setItem('dismissed_mes_alert_' + currentMesAlertKey, 'true');
+    }
+    if (modal) {
+      modal.style.display = "none";
+      modal.setAttribute("aria-hidden", "true");
+    }
+  }
+
+  function onMesModalBackdropClick(e) {
+    if (e.target.id === "mesAlertModalBackdrop") {
+      closeMesAlertModal(true);
+    }
+  }
+
+  async function resolveMesErrorInDb() {
+    if (!currentMesResourceId) return;
+    const btn = document.getElementById("btnResolveMesError");
+    if (btn) btn.disabled = true;
+
+    try {
+      const res = await fetch("{{ url_for('factory.api_trigger_mes_error') }}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resource_id: currentMesResourceId, error_l0: false })
+      });
+      const data = await res.json();
+      if (data.ok) {
+        alert("✅ 機台故障已成功排除 (已寫回 Access DB ErrorL0 = False)！");
+        closeMesAlertModal(true);
+        checkMesErrors();
+      } else {
+        alert("解除故障失敗: " + (data.message || '未知錯誤'));
+      }
+    } catch(e) {
+      alert("網路連線或系統錯誤: " + e);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  // 鍵盤 Esc 鍵關閉 Modal
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeMesAlertModal(true);
+    }
+  });
+
+  function initMesAlert() {
+    checkMesErrors();
+    setInterval(checkMesErrors, 5000);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener("DOMContentLoaded", initMesAlert);
+  } else {
+    initMesAlert();
+  }
+  </script>
+  {% endif %}
+
   {% block scripts %}{% endblock %}
 </body>
 </html>

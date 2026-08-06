@@ -810,3 +810,48 @@ def api_mes_analytics():
         print("MES Analytics Error:", e)
         return jsonify({"error": str(e)}), 500
 
+
+@factory_bp.route("/api/mes_alerts", methods=["GET"])
+@login_required
+def api_mes_alerts():
+    """
+    僅供管理者頁面調用：查詢 Access DB (tblMachineReport) 中最新 Error 變數狀態與原因
+    """
+    if session.get("role") != "admin":
+        return jsonify({"has_error": False, "errors": [], "message": "Only admins can receive MES alerts"})
+
+    reset_dismiss = bool(session.pop("just_logged_in", False))
+
+    from .mes_data_service import MesDataService
+    errors = MesDataService.get_active_machine_errors()
+    return jsonify({
+        "has_error": len(errors) > 0,
+        "errors": errors,
+        "count": len(errors),
+        "reset_dismiss": reset_dismiss
+    })
+
+
+@factory_bp.route("/api/trigger_mes_error", methods=["POST"])
+@login_required
+def api_trigger_mes_error():
+    """
+    管理者測試用：在 Access DB 中為指定機台寫入 Error 變數
+    """
+    if session.get("role") != "admin":
+        abort(403)
+
+    data = request.get_json(silent=True) or {}
+    resource_id = int(data.get("resource_id", 8)) # 預設測試 8 號加熱站
+    error_l0 = bool(data.get("error_l0", True))
+
+    from .mes_data_service import MesDataService
+    ok = MesDataService.set_machine_error(resource_id, error_l0)
+    return jsonify({
+        "ok": ok,
+        "resource_id": resource_id,
+        "error_l0": error_l0,
+        "message": f"機台 (ID: {resource_id}) ErrorL0 變數已更新為 {error_l0}"
+    })
+
+

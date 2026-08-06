@@ -148,6 +148,21 @@ _RESOURCE_NAMES: Dict[int, str] = {
 
 
 # ---------------------------------------------------------------------------
+# 故障原因對照表（用於 Access DB Error 變數說明）
+# ---------------------------------------------------------------------------
+_ERROR_REASONS: Dict[int, str] = {
+    1: "上/下蓋倉儲站料管備料用盡 (Magazine Empty) / 產線退料遮蔽警報",
+    2: "壓合站氣壓不足 (<0.4 MPa) / 沖壓模具定位未就位 (Press Position Fault)",
+    3: "ASRS 堆垛機立體倉位感測器遮蔽 / 倉位條碼掃描辨識失敗 (ASRS Sensor Fault)",
+    4: "視覺檢測站相機未偵測到工件 (Camera found no workpiece) / 檢測光源衰減",
+    5: "機器人組裝夾頭夾取工具類型錯誤 (Unknown tool type gripped) / 夾頭未夾緊工件",
+    6: "量測探針高度異常 / 產品厚度規格超過設定公差容許值 (Measurement Out-of-Spec)",
+    7: "鑽孔刀具磨損告警 (Tool Wear Warning) / 主軸轉速過低",
+    8: "加熱爐溫度超過上限 (Overheat Alarm) / 止動器位置無工件 (No Workpiece at Stopper)",
+}
+
+
+# ---------------------------------------------------------------------------
 # Service class
 # ---------------------------------------------------------------------------
 
@@ -348,11 +363,82 @@ class MesDataService:
             print(f"[MesDataService Warning] get_work_plan failed: {e}")
             return None
 
+    # --- Machine Errors ---
+
+    @staticmethod
+    def get_active_machine_errors() -> List[dict]:
+        """
+        讀取 Access.db (tblMachineReport) 最新一筆機台回報，
+        若 ErrorL0 = True 或 ErrorL1 = True 或 ErrorL2 = True，
+        則整理成警示視窗用的詳細資料結構與原因說明。
+        """
+        try:
+            conn = get_festo_db()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT r.ResourceID, r.ResourceName, m.ErrorL0, m.ErrorL1, m.ErrorL2, m.TimeStamp, m.ID "
+                    "FROM tblResource r "
+                    "LEFT JOIN tblMachineReport m ON r.ResourceID = m.ResourceID "
+                    "WHERE m.ID IN (SELECT MAX(ID) FROM tblMachineReport GROUP BY ResourceID) "
+                    "AND (m.ErrorL0 = True OR m.ErrorL1 = True OR m.ErrorL2 = True) "
+                    "ORDER BY m.ID DESC"
+                )
+                errors = []
+                for row in cursor.fetchall():
+                    res_id = row[0]
+                    res_name = row[1] or f"Station-{res_id}"
+                    err_l0 = bool(row[2])
+                    err_l1 = bool(row[3])
+                    err_l2 = bool(row[4])
+                    time_stamp = row[5]
+                    time_str = time_stamp.strftime("%Y-%m-%d %H:%M:%S") if time_stamp else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                    level = "ErrorL0 (一級急停故障)" if err_l0 else ("ErrorL1 (二級製程警報)" if err_l1 else "ErrorL2 (三級系統異常)")
+                    reason = _ERROR_REASONS.get(res_id, "機台感測器或機械手通訊異常，請至戰情室檢查。")
+
+                    errors.append({
+                        "resource_id": res_id,
+                        "resource_name": res_name,
+                        "error_l0": err_l0,
+                        "error_l1": err_l1,
+                        "error_l2": err_l2,
+                        "error_level": level,
+                        "reason": reason,
+                        "timestamp": time_str,
+                    })
+                return errors
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f"[MesDataService Warning] get_active_machine_errors failed: {e}")
+            return []
+
+    @staticmethod
+    def set_machine_error(resource_id: int, error_l0: bool = True) -> bool:
+        """在 Access DB (tblMachineReport) 寫入一筆機台狀態紀錄以測試 Error 變數"""
+        try:
+            conn = get_festo_db()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT INTO tblMachineReport (ResourceID, [TimeStamp], AutomaticMode, ManualMode, Busy, [Reset], ErrorL0, ErrorL1, ErrorL2) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (resource_id, datetime.now(), True, False, False, False, error_l0, False, False)
+                )
+                conn.commit()
+                clear_mes_cache()
+                return True
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f"[MesDataService Warning] set_machine_error failed: {e}")
+            return False
+
     # --- Machine Status ---
 
     @staticmethod
     def get_machine_status() -> List[dict]:
-        """取得各機台即時狀態 (tblMachineReport 最新一筆)"""
         try:
             conn = get_festo_db()
             try:

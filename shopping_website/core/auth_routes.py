@@ -62,6 +62,7 @@ def login():
                 session["user_id"] = user["id"]
                 session["account"] = user["account"]
                 session["role"] = user["role"]
+                session["just_logged_in"] = True
 
                 return redirect(url_for("order.order_page"))
             else:
