@@ -45,38 +45,143 @@ header {
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
 }
 
-nav {
-  max-width: 1200px; /* 稍微加寬以容納更多選單 */
+/* ── 主導覽列 ── */
+.main-nav {
+  max-width: 1280px;
   margin: 0 auto;
-  padding: 0.6rem 1.2rem;
+  padding: 0 1.2rem;
   display: flex;
   align-items: center;
-  gap: 0.5rem; /* 稍微縮小間距 */
-  flex-wrap: wrap; /* 允許換行，避免太擠 */
+  gap: 0.25rem;
+  height: 52px;        /* 固定高度，不會換行 */
+  flex-wrap: nowrap;
 }
 
-/* 右上角的登入/登出區域 */
-nav span {
+/* 直接連結（首頁、登出等） */
+.main-nav .nav-link {
+  text-decoration: none;
+  font-size: 0.92rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+  color: var(--text-main);
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.main-nav .nav-link:hover {
+  background-color: rgba(0, 159, 227, 0.1);
+  color: var(--festo-blue-dark);
+}
+
+/* ── 下拉選單容器 ── */
+.nav-dropdown {
+  position: relative;
+}
+
+/* 觸發按鈕（看起來跟連結一樣） */
+.nav-dropdown-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.92rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+  color: var(--text-main);
+  white-space: nowrap;
+  font-family: inherit;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.nav-dropdown-btn:hover {
+  background-color: rgba(0, 159, 227, 0.1);
+  color: var(--festo-blue-dark);
+}
+
+/* 箭頭：hover 時旋轉 */
+.nav-caret {
+  font-size: 0.7rem;
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+.nav-dropdown:hover .nav-caret {
+  transform: rotate(180deg);
+}
+
+/* 下拉選單面板（預設隱藏） */
+.nav-dropdown-menu {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 100%;           /* 緊貼按鈕底部，無空隙 */
+  left: 0;
+  padding-top: 8px;    /* 用 padding 製造緩衝區，滑鼠移過去不斷線 */
+  z-index: 200;
+  /* 隱藏時延遲 150ms 才消失，給使用者緩衝時間 */
+  transition: opacity 0.15s ease, visibility 0s linear 0.15s;
+}
+
+/* 選單內容卡片 */
+.nav-dropdown-menu-inner {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  padding: 0.4rem 0;
+  min-width: 160px;
+  animation: dropdownFadeIn 0.15s ease;
+}
+@keyframes dropdownFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* hover 時立刻顯示（無延遲） */
+.nav-dropdown:hover .nav-dropdown-menu {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 0.15s ease, visibility 0s linear 0s;
+}
+
+/* 選單內的連結 */
+.nav-dropdown-menu a {
+  display: block;
+  padding: 0.5rem 1.1rem;
+  font-size: 0.88rem;
+  color: var(--text-main);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 0.12s ease;
+}
+.nav-dropdown-menu a:hover {
+  background-color: #f0f9ff;
+  color: var(--festo-blue-dark);
+}
+
+/* 分隔線 */
+.nav-dropdown-divider {
+  height: 1px;
+  background: #e2e8f0;
+  margin: 0.3rem 0;
+}
+
+/* 右側使用者區 */
+.nav-right {
   margin-left: auto;
   display: flex;
+  align-items: center;
   gap: 0.5rem;
 }
 
-/* 導覽列連結 */
-nav a {
-  text-decoration: none;
-  font-size: 0.95rem;
-  padding: 0.4rem 0.6rem;
-  border-radius: 999px;
-  color: var(--text-main);
-  white-space: nowrap; /* 確保文字不會斷成兩行 */
-  transition: background-color 0.15s ease, color 0.15s ease;
+/* 相容舊版 nav span（MES Alert 等可能用到） */
+nav span.nav-user {
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
-nav a:hover {
-  background-color: rgba(0, 159, 227, 0.08);
-  color: var(--festo-blue-dark);
-}
 
 main {
   max-width: 1100px;

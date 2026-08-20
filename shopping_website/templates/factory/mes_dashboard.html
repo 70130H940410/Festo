@@ -189,6 +189,266 @@
     border-radius: 50%;
     pointer-events: none;
 }
+
+/* ===== 倉儲 Buffer Grid 樣式 ===== */
+.buffer-panel {
+    background: #1e293b;
+    border-radius: 12px;
+    border: 1px solid #334155;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+}
+
+.buffer-summary {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.2rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.buffer-stat-chip {
+    padding: 0.3rem 0.9rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: 1px solid;
+}
+.buffer-stat-chip.total  { background: rgba(56,189,248,0.1); color: #38bdf8; border-color: rgba(56,189,248,0.3); }
+.buffer-stat-chip.occ    { background: rgba(251,191,36,0.1);  color: #fbbf24; border-color: rgba(251,191,36,0.3); }
+.buffer-stat-chip.empty  { background: rgba(100,116,139,0.15); color: #94a3b8; border-color: rgba(100,116,139,0.3); }
+
+.buffer-legend {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.2rem;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: #94a3b8;
+}
+
+.legend-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+/* 左右兩半布局 */
+.buffer-two-panel {
+    display: flex;
+    gap: 0;
+    align-items: flex-start;
+    overflow-x: auto;
+}
+
+.buffer-half {
+    flex: 1;
+    min-width: 320px;
+}
+
+.buffer-half-title {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #64748b;
+    text-align: center;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    padding: 0.2rem 0;
+    border-bottom: 1px solid rgba(51,65,85,0.5);
+    margin-bottom: 8px;
+}
+
+.buffer-divider {
+    width: 2px;
+    background: linear-gradient(to bottom,
+        transparent 0%,
+        #334155 15%,
+        #475569 50%,
+        #334155 85%,
+        transparent 100%);
+    align-self: stretch;
+    flex-shrink: 0;
+    margin: 0 1rem;
+    position: relative;
+}
+
+
+
+/* 半區 col 標籤 */
+.buf-col-labels-half {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+/* 半區格線（4欄×4列 = 16格） */
+.buffer-grid-half {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+}
+
+.buf-col-label {
+    text-align: center;
+    font-size: 0.65rem;
+    color: #475569;
+    font-weight: 600;
+}
+
+.buf-cell {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+    min-height: 62px;
+    overflow: hidden;
+}
+
+.buf-cell:hover {
+    transform: scale(1.08);
+    z-index: 10;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    border-color: rgba(255,255,255,0.3) !important;
+}
+
+/* 空位 (Pno=0) */
+.buf-cell.pno-0 {
+    background: rgba(30, 41, 59, 0.6);
+    border-color: rgba(51, 65, 85, 0.6);
+}
+
+/* 盤子/托盤 (Pno=25) - 銀色 */
+.buf-cell.pno-25 {
+    background: linear-gradient(135deg, #6b7280, #e5e7eb);
+    border-color: rgba(209, 213, 219, 0.7);
+    box-shadow: 0 2px 8px rgba(156, 163, 175, 0.35),
+                inset 0 1px 0 rgba(255,255,255,0.4);
+}
+
+/* 黑色加工品 (Pno=210) */
+.buf-cell.pno-210 {
+    background: linear-gradient(135deg, #0a0a0f, #1f2937);
+    border-color: rgba(107, 114, 128, 0.7);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08);
+}
+
+/* 藍色加工品 (Pno=410) */
+.buf-cell.pno-410 {
+    background: linear-gradient(135deg, #1e3a5f, #3b82f6);
+    border-color: rgba(59, 130, 246, 0.6);
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+/* 白色加工品 (Pno=610) */
+.buf-cell.pno-610 {
+    background: linear-gradient(135deg, #cbd5e1, #f1f5f9);
+    border-color: rgba(226, 232, 240, 0.7);
+    box-shadow: 0 2px 8px rgba(226, 232, 240, 0.25);
+}
+
+/* 其他未知 Pno */
+.buf-cell.pno-other {
+    background: linear-gradient(135deg, #4c1d95, #7c3aed);
+    border-color: rgba(124, 58, 237, 0.5);
+    box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
+}
+
+.buf-pos-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: rgba(255,255,255,0.5);
+    position: absolute;
+    top: 4px;
+    left: 5px;
+    line-height: 1;
+}
+
+.buf-cell.pno-0   .buf-pos-label { color: rgba(100,116,139,0.6); }
+.buf-cell.pno-25  .buf-pos-label { color: rgba(30,41,59,0.7); }
+.buf-cell.pno-610 .buf-pos-label { color: rgba(30,41,59,0.7); }
+
+.buf-icon {
+    font-size: 1.4rem;
+    line-height: 1;
+    margin-bottom: 2px;
+}
+
+.buf-ono {
+    font-size: 0.58rem;
+    color: rgba(255,255,255,0.75);
+    font-family: monospace;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 90%;
+    text-align: center;
+}
+
+.buf-cell.pno-610 .buf-ono { color: rgba(15,23,42,0.8); }
+.buf-cell.pno-25  .buf-ono { color: rgba(15,23,42,0.75); }
+.buf-cell.pno-0   .buf-icon { opacity: 0.12; }
+.buf-cell.pno-0   .buf-ono  { display: none; }
+
+/* Tooltip */
+.buf-tooltip {
+    display: none;
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.75rem;
+    color: #f1f5f9;
+    white-space: nowrap;
+    z-index: 50;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+    pointer-events: none;
+    line-height: 1.6;
+}
+
+.buf-cell:hover .buf-tooltip {
+    display: block;
+    animation: fadeInUp 0.15s ease;
+}
+
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.buf-col-labels {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 6px;
+    min-width: 480px;
+    margin-bottom: 4px;
+}
+
+.buf-col-label {
+    text-align: center;
+    font-size: 0.65rem;
+    color: #475569;
+    font-weight: 600;
+}
 </style>
 
 <div class="mes-dashboard">
@@ -207,6 +467,68 @@
     <div id="machines-grid" class="mes-grid">
         <!-- 機台卡片會透過 JS 動態載入 -->
         <div style="color: #64748b; padding: 2rem;">載入中，請稍候...</div>
+    </div>
+
+    <!-- ===== 倉儲 Buffer 狀態面板 ===== -->
+    <div class="mes-section-title">
+        <svg style="vertical-align:middle;margin-right:0.4rem;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-4 0v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/>
+        </svg>
+        倉儲 Buffer 狀態 (ASRS Buffer Positions)
+    </div>
+
+    <div class="buffer-panel">
+        <!-- 統計摘要 -->
+        <div class="buffer-summary">
+            <span class="buffer-stat-chip total" id="buf-total">總格數：32</span>
+            <span class="buffer-stat-chip occ"   id="buf-occupied">佔用：—</span>
+            <span class="buffer-stat-chip empty" id="buf-empty">空位：—</span>
+        </div>
+
+        <!-- 圖例說明 -->
+        <div class="buffer-legend">
+            <div class="legend-item"><div class="legend-dot" style="background:#1f2937;border:1px solid #6b7280;"></div>黑色加工品 (Pno 210)</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#3b82f6;"></div>藍色加工品 (Pno 410)</div>
+            <div class="legend-item"><div class="legend-dot" style="background:#e2e8f0;border:1px solid #94a3b8;"></div>白色加工品 (Pno 610)</div>
+            <div class="legend-item"><div class="legend-dot" style="background:linear-gradient(135deg,#6b7280,#e5e7eb);border:1px solid #d1d5db;"></div>盤子/托盤 (Pno 25)</div>
+            <div class="legend-item"><div class="legend-dot" style="background:rgba(51,65,85,0.6);border:1px solid #334155;"></div>空位 (Pno 0)</div>
+        </div>
+
+        <!-- 格線 左 1~16 / 右 17~32 -->
+        <div class="buffer-two-panel">
+
+            <!-- 左側：BufPos 1~16 -->
+            <div class="buffer-half">
+                <div class="buffer-half-title">左區 BufPos 1 ~ 16</div>
+                <div class="buf-col-labels-half">
+                    <div class="buf-col-label">C1</div>
+                    <div class="buf-col-label">C2</div>
+                    <div class="buf-col-label">C3</div>
+                    <div class="buf-col-label">C4</div>
+                </div>
+                <div class="buffer-grid-half" id="buffer-grid-left">
+                    <div style="color:#64748b;padding:1rem;grid-column:1/-1;text-align:center;font-size:0.8rem;">載入中...</div>
+                </div>
+            </div>
+
+            <!-- 中間分隔線 -->
+            <div class="buffer-divider"></div>
+
+            <!-- 右側：BufPos 17~32 -->
+            <div class="buffer-half">
+                <div class="buffer-half-title">右區 BufPos 17 ~ 32</div>
+                <div class="buf-col-labels-half">
+                    <div class="buf-col-label">C1</div>
+                    <div class="buf-col-label">C2</div>
+                    <div class="buf-col-label">C3</div>
+                    <div class="buf-col-label">C4</div>
+                </div>
+                <div class="buffer-grid-half" id="buffer-grid-right">
+                    <div style="color:#64748b;padding:1rem;grid-column:1/-1;text-align:center;font-size:0.8rem;">載入中...</div>
+                </div>
+            </div>
+
+        </div>
     </div>
 
     <div class="mes-section-title">機台能耗與氣壓分析 (Analytics)</div>
@@ -424,13 +746,102 @@
         }
     }
 
+    // ===== 倉儲 Buffer 狀態 =====
+
+    // 依據 FNo (Pno) 決定顏色/類型
+    // 0=空位, 25=盤子, 210=黑色, 410=藍色, 610=白色
+    const BUF_PNO_CONFIG = {
+        0:   { cls: 'pno-0',     icon: '▫️',  label: '空位',        pnoText: '' },
+        25:  { cls: 'pno-25',    icon: '🪙',  label: '盤子/托盤',   pnoText: 'Tray' },
+        210: { cls: 'pno-210',   icon: '⬛',  label: '黑色加工品',  pnoText: '黑' },
+        410: { cls: 'pno-410',   icon: '🔵',  label: '藍色加工品',  pnoText: '藍' },
+        610: { cls: 'pno-610',   icon: '⬜',  label: '白色加工品',  pnoText: '白' },
+    };
+
+    function getBufPnoCfg(fno) {
+        const key = Number(fno) || 0;
+        return BUF_PNO_CONFIG[key] || { cls: 'pno-other', icon: '🟣', label: `Pno ${key}`, pnoText: `P${key}` };
+    }
+
+    async function fetchBufferStatus() {
+        try {
+            const res = await fetch("/factory/api/buffer_status?_t=" + Date.now());
+            if (!res.ok) return;
+            const data = await res.json();
+            if (data.error) return;
+
+            // 更新統計摘要（以 f_no != 0 判斷佔用）
+            document.getElementById('buf-total').textContent    = `總格數：${data.summary.total}`;
+            document.getElementById('buf-occupied').textContent = `佔用：${data.summary.occupied}`;
+            document.getElementById('buf-empty').textContent    = `空位：${data.summary.empty}`;
+
+            // 渲染 左區(1~16) + 右區(17~32)
+            const gridLeft  = document.getElementById('buffer-grid-left');
+            const gridRight = document.getElementById('buffer-grid-right');
+
+            if (!data.positions || data.positions.length === 0) {
+                const empty = `<div style="color:#64748b;padding:1rem;grid-column:1/-1;text-align:center;font-size:0.8rem;">查無資料</div>`;
+                gridLeft.innerHTML = empty;
+                gridRight.innerHTML = empty;
+                return;
+            }
+
+            // 生成单一格子 HTML
+            function makeCellHtml(p, sideLabel) {
+                const cfg = getBufPnoCfg(p.f_no);
+                // 在哪區哪列哪行
+                const posIn16 = (p.buf_pos - 1) % 16;          // 0~15 內部索引
+                const row = Math.floor(posIn16 / 4) + 1;        // 1~4
+                const col = (posIn16 % 4) + 1;                  // 1~4
+
+                const tooltipLines = [
+                    `<b>BufPos ${p.buf_pos}</b> (${sideLabel} R${row}-C${col})`,
+                    `加工品: ${cfg.label}`,
+                    `Pno: ${p.f_no || '—'}`,
+                    p.o_no ? `工單: #${p.o_no}` : '工單: 無',
+                    p.time_stamp ? `更新: ${p.time_stamp}` : '',
+                ].filter(Boolean).join('<br>');
+
+                return `
+                    <div class="buf-cell ${cfg.cls}" id="buf-pos-${p.buf_pos}">
+                        <span class="buf-pos-label">${p.buf_pos}</span>
+                        <span class="buf-icon">${cfg.icon}</span>
+                        <span class="buf-ono">${cfg.pnoText || ''}</span>
+                        <div class="buf-tooltip">${tooltipLines}</div>
+                    </div>
+                `;
+            }
+
+            // 左區：BufPos 1~16 (index 0~15)
+            let htmlL = '';
+            for (let i = 0; i < 16; i++) {
+                const p = data.positions[i] || { buf_pos: i+1, f_no: 0, o_no: 0, time_stamp: '' };
+                htmlL += makeCellHtml(p, '左');
+            }
+            gridLeft.innerHTML = htmlL;
+
+            // 右區：BufPos 17~32 (index 16~31)
+            let htmlR = '';
+            for (let i = 16; i < 32; i++) {
+                const p = data.positions[i] || { buf_pos: i+1, f_no: 0, o_no: 0, time_stamp: '' };
+                htmlR += makeCellHtml(p, '右');
+            }
+            gridRight.innerHTML = htmlR;
+
+        } catch (err) {
+            console.error('fetchBufferStatus error:', err);
+        }
+    }
+
     // 初次載入
     fetchMesStatus();
     fetchMesAnalytics();
+    fetchBufferStatus();
     
-    // 每 5 秒自動更新狀態 (圖表不需要頻繁更新，可以設長一點，這裡先一起)
+    // 每 5 秒自動更新狀態
     setInterval(() => {
         fetchMesStatus();
+        fetchBufferStatus();
     }, 5000);
 </script>
 {% endblock %}

@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from .db import get_festo_db
+from .db import get_festo_db, get_supabase_client
 
 
 # ---------------------------------------------------------------------------
@@ -166,7 +166,8 @@ _ERROR_REASONS: Dict[int, str] = {
 # Service class
 # ---------------------------------------------------------------------------
 
-_CACHE_TTL = 30.0  # 快取 30 秒
+_CACHE_TTL = 30.0          # 一般資料快取 30 秒
+_BUFFER_CACHE_TTL = 5.0    # Buffer 位置快取 5 秒（與前端輪詢频率一致）
 _MEMORY_CACHE: Dict[str, Tuple[Any, float]] = {}
 
 
@@ -195,11 +196,26 @@ class MesDataService:
 
     @staticmethod
     def get_resources() -> List[ResourceInfo]:
-        """取得所有工站"""
+        """取得所有工站（優先 Supabase，fallback Access）"""
         cached = _get_cached("resources")
         if cached is not None:
             return cached
 
+        # ── Supabase 路徑 ─────────────────────────────────────
+        sb = get_supabase_client()
+        if sb:
+            try:
+                resp = sb.table("tbl_resource").select("resource_id,resource_name,resource_type").execute()
+                if resp.data:
+                    res = [ResourceInfo(resource_id=r["resource_id"],
+                                       name=r["resource_name"] or f"Station-{r['resource_id']}",
+                                       resource_type=r.get("resource_type"))
+                           for r in resp.data]
+                    return _set_cached("resources", res)
+            except Exception as e:
+                print(f"[MesDataService] Supabase get_resources failed, fallback: {e}")
+
+        # ── Access fallback ───────────────────────────────────────
         try:
             conn = get_festo_db()
             try:
@@ -244,10 +260,25 @@ class MesDataService:
 
     @staticmethod
     def get_real_working_times() -> List[OperationTime]:
-        """取得各站對各操作的真實加工時間 (tblResourceOperation)"""
+        """取得各站對各操作的真實加工時間（優先 Supabase，fallback Access）"""
         cached = _get_cached("real_working_times")
         if cached is not None:
             return cached
+
+        sb = get_supabase_client()
+        if sb:
+            try:
+                resp = sb.table("tbl_resource_operation").select(
+                    "resource_id,op_no,working_time,offset_time"
+                ).gt("resource_id", 0).order("resource_id").order("op_no").execute()
+                if resp.data:
+                    res = [OperationTime(resource_id=r["resource_id"], op_no=r["op_no"],
+                                        working_time=int(r["working_time"] or 0),
+                                        offset_time=int(r["offset_time"] or 0))
+                           for r in resp.data]
+                    return _set_cached("real_working_times", res)
+            except Exception as e:
+                print(f"[MesDataService] Supabase get_real_working_times failed, fallback: {e}")
 
         try:
             conn = get_festo_db()
@@ -367,11 +398,44 @@ class MesDataService:
 
     @staticmethod
     def get_active_machine_errors() -> List[dict]:
-        """
-        讀取 Access.db (tblMachineReport) 最新一筆機台回報，
-        若 ErrorL0 = True 或 ErrorL1 = True 或 ErrorL2 = True，
-        則整理成警示視窗用的詳細資料結構與原因說明。
-        """
+        """讀取最新機台錯誤狀態（優先 Supabase，fallback Access）"""
+        sb = get_supabase_client()
+        if sb:
+            try:
+                # 找每台機最新一筆
+                resp = sb.table("tbl_machine_report").select(
+                    "id,resource_id,timestamp,error_l0,error_l1,error_l2"
+                ).or_("error_l0.eq.true,error_l1.eq.true,error_l2.eq.true"
+                ).order("id", desc=True).limit(50).execute()
+
+                resources_resp = sb.table("tbl_resource").select("resource_id,resource_name").execute()
+                name_map = {r["resource_id"]: r["resource_name"] for r in (resources_resp.data or [])}
+
+                seen = set()
+                errors = []
+                for row in (resp.data or []):
+                    res_id = row["resource_id"]
+                    if res_id in seen:
+                        continue
+                    seen.add(res_id)
+                    err_l0 = row.get("error_l0", False)
+                    err_l1 = row.get("error_l1", False)
+                    err_l2 = row.get("error_l2", False)
+                    level = ("ErrorL0 (一級急停故障)" if err_l0 else
+                             "ErrorL1 (二級製程警報)" if err_l1 else "ErrorL2 (三級系統異常)")
+                    errors.append({
+                        "resource_id": res_id,
+                        "resource_name": name_map.get(res_id, f"Station-{res_id}"),
+                        "error_l0": err_l0, "error_l1": err_l1, "error_l2": err_l2,
+                        "error_level": level,
+                        "reason": _ERROR_REASONS.get(res_id, "機台感測器或機械手通訊異常"),
+                        "timestamp": row.get("timestamp", ""),
+                    })
+                return errors
+            except Exception as e:
+                print(f"[MesDataService] Supabase get_active_machine_errors failed, fallback: {e}")
+
+        # Access fallback
         try:
             conn = get_festo_db()
             try:
@@ -393,19 +457,12 @@ class MesDataService:
                     err_l2 = bool(row[4])
                     time_stamp = row[5]
                     time_str = time_stamp.strftime("%Y-%m-%d %H:%M:%S") if time_stamp else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
                     level = "ErrorL0 (一級急停故障)" if err_l0 else ("ErrorL1 (二級製程警報)" if err_l1 else "ErrorL2 (三級系統異常)")
                     reason = _ERROR_REASONS.get(res_id, "機台感測器或機械手通訊異常，請至戰情室檢查。")
-
                     errors.append({
-                        "resource_id": res_id,
-                        "resource_name": res_name,
-                        "error_l0": err_l0,
-                        "error_l1": err_l1,
-                        "error_l2": err_l2,
-                        "error_level": level,
-                        "reason": reason,
-                        "timestamp": time_str,
+                        "resource_id": res_id, "resource_name": res_name,
+                        "error_l0": err_l0, "error_l1": err_l1, "error_l2": err_l2,
+                        "error_level": level, "reason": reason, "timestamp": time_str,
                     })
                 return errors
             finally:
@@ -439,6 +496,30 @@ class MesDataService:
 
     @staticmethod
     def get_machine_status() -> List[dict]:
+        """取得各機台最新狀態（優先 Supabase，fallback Access）"""
+        sb = get_supabase_client()
+        if sb:
+            try:
+                res_resp = sb.table("tbl_resource").select("resource_id,resource_name").execute()
+                machines = []
+                for r in (res_resp.data or []):
+                    m_resp = sb.table("tbl_machine_report").select(
+                        "automatic_mode,manual_mode,busy,error_l0"
+                    ).eq("resource_id", r["resource_id"]).order("id", desc=True).limit(1).execute()
+                    m = m_resp.data[0] if m_resp.data else None
+                    machines.append({
+                        "resource_id": r["resource_id"],
+                        "name": r["resource_name"],
+                        "automatic": m["automatic_mode"] if m else False,
+                        "manual": m["manual_mode"] if m else False,
+                        "busy": m["busy"] if m else False,
+                        "error": m["error_l0"] if m else False,
+                    })
+                return machines
+            except Exception as e:
+                print(f"[MesDataService] Supabase get_machine_status failed, fallback: {e}")
+
+        # Access fallback
         try:
             conn = get_festo_db()
             try:
@@ -448,7 +529,6 @@ class MesDataService:
                     "WHERE ResourceType IS NOT NULL OR ResourceName IS NOT NULL"
                 )
                 resources = cursor.fetchall()
-
                 machines = []
                 for r in resources:
                     cursor.execute(
@@ -458,8 +538,7 @@ class MesDataService:
                     )
                     m = cursor.fetchone()
                     machines.append({
-                        "resource_id": r[0],
-                        "name": r[1],
+                        "resource_id": r[0], "name": r[1],
                         "automatic": bool(m[0]) if m else False,
                         "manual": bool(m[1]) if m else False,
                         "busy": bool(m[2]) if m else False,
@@ -591,3 +670,109 @@ class MesDataService:
             return orders
         finally:
             conn.close()
+
+    # --- Buffer Positions ---
+
+    @staticmethod
+    def get_buffer_positions() -> List[dict]:
+        """
+        讀取倉儲 Buffer 位置 1~32 的加工品狀態（優先 Supabase，fallback Access）。
+
+        tblBufferPos 欄位說明：
+          - BufPos     : Buffer 位置編號（1~32）
+          - PNo        : 加工品品號（Pno）
+                         0=空位, 25=銀色盤子, 210=黑, 410=藍, 610=白
+          - ONo        : 工單編號（0=空位）
+          - OPos       : 位置
+          - Type       : 類型代碼
+          - Zone       : 區域編號
+          - Quantity   : 當前數量
+          - QuantityMax: 最大容量
+          - TimeStamp  : 最後更新時間
+          - PalletID   : 托盤 ID
+
+        回傳：32 個 dict 的 list（index 0 = BufPos 1，index 31 = BufPos 32）
+        """
+        # Buffer 位置用較短的快取（5秒）
+        if "buffer_positions" in _MEMORY_CACHE:
+            val, ts = _MEMORY_CACHE["buffer_positions"]
+            if time.time() - ts < _BUFFER_CACHE_TTL:
+                return val
+
+        # ── Supabase 路徑 ─────────────────────────────────────
+        sb = get_supabase_client()
+        if sb:
+            try:
+                resp = sb.table("tbl_buffer_pos").select(
+                    "buf_pos,f_no,o_no,u_pos,type,zone,quantity,quantity_max,time_stamp,pallet_id"
+                ).order("buf_pos").execute()
+                if resp.data:
+                    pos_map = {r["buf_pos"]: r for r in resp.data}
+                    result = []
+                    for i in range(1, 33):
+                        r = pos_map.get(i, {})
+                        result.append({
+                            "buf_pos":      i,
+                            "f_no":         int(r.get("f_no") or 0),
+                            "o_no":         int(r.get("o_no") or 0),
+                            "u_pos":        int(r.get("u_pos") or 0),
+                            "type":         int(r.get("type") or 0),
+                            "zone":         int(r.get("zone") or 0),
+                            "quantity":     int(r.get("quantity") or 0),
+                            "quantity_max": int(r.get("quantity_max") or 0),
+                            "time_stamp":   str(r.get("time_stamp") or ""),
+                            "pallet_id":    int(r.get("pallet_id") or 0),
+                        })
+                    return _set_cached("buffer_positions", result)
+            except Exception as e:
+                print(f"[MesDataService] Supabase get_buffer_positions failed, fallback: {e}")
+
+        # ── Access fallback ───────────────────────────────────────
+        try:
+            conn = get_festo_db()
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT BufPos, PNo, ONo, OPos, [Type], Zone, Quantity, QuantityMax, [TimeStamp], PalletID "
+                    "FROM tblBufferPos "
+                    "WHERE ResourceId = 3 AND BufPos >= 1 AND BufPos <= 32 "
+                    "ORDER BY BufPos"
+                )
+                rows = cursor.fetchall()
+                pos_map = {row[0]: row for row in rows}
+                result = []
+                for i in range(1, 33):
+                    row = pos_map.get(i)
+                    if row:
+                        ts = row[8]
+                        ts_str = ts.strftime("%Y-%m-%d %H:%M:%S") if hasattr(ts, "strftime") else str(ts or "")
+                        result.append({
+                            "buf_pos":      i,
+                            "f_no":         int(row[1] or 0),   # PNo → f_no (Pno 顏色代碼)
+                            "o_no":         int(row[2] or 0),
+                            "u_pos":        int(row[3] or 0),   # OPos → u_pos
+                            "type":         int(row[4] or 0),
+                            "zone":         int(row[5] or 0),
+                            "quantity":     int(row[6] or 0),
+                            "quantity_max": int(row[7] or 0),
+                            "time_stamp":   ts_str,
+                            "pallet_id":    int(row[9] or 0) if row[9] else 0,
+                        })
+                    else:
+                        result.append({
+                            "buf_pos": i, "f_no": 0, "o_no": 0, "u_pos": 0,
+                            "type": 0, "zone": 0, "quantity": 0,
+                            "quantity_max": 0, "time_stamp": "", "pallet_id": 0,
+                        })
+                return _set_cached("buffer_positions", result)
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f"[MesDataService Warning] get_buffer_positions failed: {e}")
+            # 回傳 32 個空格作為 fallback
+            return [
+                {"buf_pos": i, "f_no": 0, "o_no": 0, "u_pos": 0,
+                 "type": 0, "zone": 0, "quantity": 0,
+                 "quantity_max": 0, "time_stamp": "", "pallet_id": 0}
+                for i in range(1, 33)
+            ]

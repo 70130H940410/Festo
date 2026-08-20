@@ -1,4 +1,17 @@
-# shopping_website/core/manager_routes.py
+# =============================================================
+# core/manager_routes.py
+# 工廠管理者（admin 角色）路由模組
+# ----------------------------------------------------------
+# Blueprint 名稱：manager（前綴 /manager）
+# 需要 @manager_required（角色必須是 admin）
+#
+# 路由清單：
+#   GET/POST /manager/inventory          → 庫存管理（查看/更新產品庫存）
+#   GET/POST /manager/process-templates  → 製程步驟模板管理
+#   GET      /manager/orders             → 訂單總覽（搜尋/篩選/分頁）
+#   GET      /manager/orders/<order_id>  → 單筆訂單詳細資料
+#   POST     /manager/orders/<order_id>/delete → 拒絕訂單（保留紀錄）
+# =============================================================
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
 from datetime import datetime
@@ -8,16 +21,18 @@ from .db import get_product_db, get_order_mgmt_db
 manager_bp = Blueprint("manager", __name__, url_prefix="/manager")
 
 
-# -----------------------------
-# ✅ 自動補欄位：避免 no such column: status / cancelled_at / rejected_at
-# -----------------------------
+# =============================================================
+# 資料庫 Schema 自動遷移（與 order_routes.py 共用邏輯）
+# =============================================================
+
 def ensure_order_list_schema(conn):
     """
-    確保 order_list 有 status / rejected_at / cancelled_at 欄位（沒有就自動補上）
+    確保 order_list 資料表有所有必要欄位（沒有就自動補上）。
+    檢查欄位：status、rejected_at、cancelled_at
     """
     cur = conn.cursor()
     try:
-        cols = [r[1] for r in cur.execute("PRAGMA table_info(order_list)").fetchall()]
+        cols    = [r[1] for r in cur.execute("PRAGMA table_info(order_list)").fetchall()]
         changed = False
 
         if "status" not in cols:
@@ -35,36 +50,50 @@ def ensure_order_list_schema(conn):
         if changed:
             conn.commit()
     except Exception:
-        # 不要讓 migration 影響頁面（表不存在等狀況）
-        pass
+        pass  # 不讓 migration 影響頁面
 
 
-# -----------------------------
-# 庫存管理（新版：直接讀寫 products.stock）
-# -----------------------------
+# =============================================================
+# 庫存管理
+# =============================================================
+
 @manager_bp.route("/inventory", methods=["GET", "POST"])
 @manager_required
 def manager_inventory():
-    error_message = None
+    """
+    庫存管理頁面。
+    - GET : 顯示所有產品的庫存量
+    - POST: 直接修改指定產品的庫存數值
+            (product_id + new_stock 來自表單)
+    
+    注意：這裡修改的是 products.stock（成品庫存），
+    不是 raw_materials（原物料）。
+    """
+    error_message   = None
     success_message = None
 
     conn = get_product_db()
-    cur = conn.cursor()
+    cur  = conn.cursor()
 
     if request.method == "POST":
         try:
             product_id = int(request.form.get("product_id", "0"))
-            new_stock = int(request.form.get("new_stock", "0"))
+            new_stock  = int(request.form.get("new_stock", "0"))
+            # 庫存不可為負
             if new_stock < 0:
                 new_stock = 0
 
-            cur.execute("UPDATE products SET stock = ? WHERE id = ?", (new_stock, product_id))
+            cur.execute(
+                "UPDATE products SET stock = ? WHERE id = ?",
+                (new_stock, product_id),
+            )
             conn.commit()
             success_message = "✅ 庫存已更新"
         except Exception as e:
             conn.rollback()
             error_message = f"❌ 更新失敗：{e}"
 
+    # 無論 GET/POST 都重新讀取最新庫存
     cur.execute("SELECT id, name, base_price, stock FROM products ORDER BY id ASC")
     products = cur.fetchall()
     conn.close()
@@ -77,30 +106,46 @@ def manager_inventory():
     )
 
 
-# -----------------------------
-# 製程模板管理（standard_process）
-# -----------------------------
+# =============================================================
+# 製程步驟模板管理
+# =============================================================
+
 @manager_bp.route("/process-templates", methods=["GET", "POST"])
 @manager_required
 def manager_process_templates():
-    error_message = None
+    """
+    製程步驟模板管理頁面（操作 product.db 的 standard_process 資料表）。
+    - GET : 顯示所有製程步驟
+    - POST: 依 action 欄位執行操作：
+        action = "add_step"         → 新增一個製程步驟
+        action = "bulk_update_time" → 批次更新所有步驟的預計加工秒數
+    
+    standard_process 欄位說明：
+      step_order        : 步驟順序（正整數，用於決定製程順序）
+      step_name         : 步驟名稱（如：組裝、品檢）
+      station           : 對應機台名稱（如：StationA）
+      description       : 步驟描述
+      estimated_time_sec: 預計加工時間（秒）
+    """
+    error_message   = None
     success_message = None
 
     conn = get_product_db()
-    cur = conn.cursor()
+    cur  = conn.cursor()
 
     if request.method == "POST":
         action = request.form.get("action", "")
 
-        # ✅ 新增步驟
+        # ---------- 新增製程步驟 ----------
         if action == "add_step":
             try:
-                step_order = int((request.form.get("step_order") or "").strip())
-                step_name = (request.form.get("step_name") or "").strip()
-                station = (request.form.get("station") or "").strip()
-                description = (request.form.get("description") or "").strip()
+                step_order         = int((request.form.get("step_order") or "").strip())
+                step_name          = (request.form.get("step_name") or "").strip()
+                station            = (request.form.get("station") or "").strip()
+                description        = (request.form.get("description") or "").strip()
                 estimated_time_sec = int((request.form.get("estimated_time_sec", "0") or "0").strip())
 
+                # 驗證輸入
                 if step_order <= 0:
                     raise ValueError("step_order 必須為正整數")
                 if not step_name:
@@ -108,13 +153,18 @@ def manager_process_templates():
                 if estimated_time_sec < 0:
                     raise ValueError("estimated_time_sec 不可為負數")
 
-                cur.execute("SELECT 1 FROM standard_process WHERE step_order = ?", (step_order,))
+                # 確認 step_order 不重複
+                cur.execute(
+                    "SELECT 1 FROM standard_process WHERE step_order = ?",
+                    (step_order,),
+                )
                 if cur.fetchone():
                     raise ValueError(f"step_order={step_order} 已存在，請換一個順序")
 
                 cur.execute(
                     """
-                    INSERT INTO standard_process (step_order, step_name, station, description, estimated_time_sec)
+                    INSERT INTO standard_process
+                    (step_order, step_name, station, description, estimated_time_sec)
                     VALUES (?, ?, ?, ?, ?)
                     """,
                     (step_order, step_name, station, description, estimated_time_sec),
@@ -125,18 +175,20 @@ def manager_process_templates():
                 conn.rollback()
                 error_message = f"❌ 新增失敗：{e}"
 
-        # ✅ 批次更新秒數
+        # ---------- 批次更新所有步驟的預計加工秒數 ----------
         elif action == "bulk_update_time":
             try:
+                # 先讀取所有步驟的現有秒數（以 id 為 key）
                 cur.execute("SELECT id, estimated_time_sec FROM standard_process")
                 old_map = {str(r["id"]): int(r["estimated_time_sec"] or 0) for r in cur.fetchall()}
 
                 changed = 0
+                # 遍歷表單，找出所有 time_{id} 欄位
                 for k, v in request.form.items():
                     if not k.startswith("time_"):
                         continue
 
-                    row_id = k.split("_", 1)[1]
+                    row_id  = k.split("_", 1)[1]
                     if row_id not in old_map:
                         continue
 
@@ -144,6 +196,7 @@ def manager_process_templates():
                     if new_sec < 0:
                         new_sec = 0
 
+                    # 只更新有變動的欄位
                     if new_sec != old_map[row_id]:
                         cur.execute(
                             "UPDATE standard_process SET estimated_time_sec = ? WHERE id = ?",
@@ -157,6 +210,7 @@ def manager_process_templates():
                 conn.rollback()
                 error_message = f"❌ 更新失敗：{e}"
 
+    # 讀取所有製程步驟（按 step_order 排序）
     cur.execute(
         """
         SELECT id, step_order, step_name, station, description, estimated_time_sec
@@ -175,23 +229,35 @@ def manager_process_templates():
     )
 
 
-# -----------------------------
-# ✅ 訂單總覽（支援 rowid 搜尋 + step 篩選 + 勾選顯示 rejected/cancelled/completed）
-# 預設只顯示 active
-# -----------------------------
+# =============================================================
+# 訂單總覽（搜尋 + 分頁 + 狀態篩選）
+# =============================================================
+
 @manager_bp.route("/orders", methods=["GET"])
 @manager_required
 def manager_orders():
-    q = request.args.get("q", "").strip()
+    """
+    管理者訂單總覽頁面，支援：
+      - tab 篩選（active/completed/cancelled/pending_payment/all）
+      - q 關鍵字搜尋（訂單ID、客戶、產品、備註）
+      - step 篩選（依製程路徑篩選）
+    
+    狀態說明：
+      active          → 生產中（已付款，工廠正在生產）
+      pending_payment → 待付款
+      completed       → 已完成
+      cancelled       → 客戶取消
+      rejected        → 管理者拒絕
+    """
+    q    = request.args.get("q", "").strip()
     step = request.args.get("step", "").strip()
-
-    # ✅ 使用 tab 參數取代勾選框
-    tab = request.args.get("tab", "active")
+    tab  = request.args.get("tab", "active")  # 預設顯示 active 訂單
 
     conn = get_order_mgmt_db()
     ensure_order_list_schema(conn)
-    cur = conn.cursor()
+    cur  = conn.cursor()
 
+    # 基礎查詢 SQL
     base_sql = """
         SELECT
             rowid AS id,
@@ -202,6 +268,7 @@ def manager_orders():
     """
     params = []
 
+    # 依 tab 篩選狀態
     if tab == "active":
         base_sql += " AND status NOT IN ('completed', 'cancelled', 'rejected', 'pending_payment') "
     elif tab == "completed":
@@ -210,9 +277,9 @@ def manager_orders():
         base_sql += " AND status IN ('cancelled', 'rejected') "
     elif tab == "pending_payment":
         base_sql += " AND status = 'pending_payment' "
-    # if tab == "all", do not filter status
+    # tab == "all" 時不加任何過濾
 
-    # ✅ 搜尋（訂單ID / 客戶 / 產品 / 備註 / ID(rowid)）
+    # 關鍵字搜尋（數字時也搜 rowid）
     if q:
         like = f"%{q}%"
         if q.isdigit():
@@ -237,7 +304,7 @@ def manager_orders():
             """
             params += [like, like, like, like]
 
-    # ✅ step 篩選
+    # 製程步驟篩選
     if step:
         base_sql += " AND step_name = ?"
         params.append(step)
@@ -247,7 +314,7 @@ def manager_orders():
     cur.execute(base_sql, params)
     orders = cur.fetchall()
 
-    # step 下拉選單（抓所有不同 step_name）
+    # 下拉選單用：取得所有不同的製程路徑
     cur.execute(
         """
         SELECT DISTINCT step_name
@@ -257,7 +324,6 @@ def manager_orders():
         """
     )
     steps = [r["step_name"] for r in cur.fetchall()]
-
     conn.close()
 
     return render_template(
@@ -266,16 +332,23 @@ def manager_orders():
         q=q,
         step=step,
         tab=tab,
-        steps=steps
+        steps=steps,
     )
 
+
+# =============================================================
+# 單筆訂單詳細資料
+# =============================================================
 
 @manager_bp.route("/orders/<order_id>", methods=["GET"])
 @manager_required
 def manager_order_detail(order_id):
+    """
+    顯示單筆訂單的詳細資訊頁面。
+    """
     conn = get_order_mgmt_db()
     ensure_order_list_schema(conn)
-    cur = conn.cursor()
+    cur  = conn.cursor()
 
     cur.execute(
         """
@@ -290,22 +363,35 @@ def manager_order_detail(order_id):
     )
     order = cur.fetchone()
     conn.close()
+
     return render_template("manager/order_detail.html", order=order)
 
 
-# ✅ 管理者：拒絕訂單（保留紀錄）
-# ✅ 重點：cancelled / completed 的單不能再拒絕
+# =============================================================
+# 拒絕訂單（保留紀錄）
+# =============================================================
+
 @manager_bp.route("/orders/<order_id>/delete", methods=["POST"])
 @manager_required
 def manager_order_delete(order_id):
+    """
+    管理者拒絕訂單（非物理刪除，保留紀錄）。
+    拒絕後 status 改為 rejected，rejected_at 記錄時間。
+    
+    限制：
+      - 必須填寫拒絕原因
+      - 已取消（cancelled）的訂單不能再拒絕
+      - 已完成（completed）的訂單不能再拒絕
+      - 已拒絕（rejected）的訂單不能重複拒絕
+    """
     reason = (request.form.get("reason") or "").strip()
     if not reason:
         flash("❌ 請選擇拒絕原因", "danger")
         return redirect(url_for("manager.manager_orders"))
 
-    # ✅ 保留原查詢條件 + 勾選狀態
-    q = (request.form.get("q") or "").strip()
-    step = (request.form.get("step") or "").strip()
+    # 保留搜尋條件（讓拒絕後回到同一個篩選狀態）
+    q             = (request.form.get("q") or "").strip()
+    step          = (request.form.get("step") or "").strip()
     show_rejected = (request.form.get("show_rejected") or "") == "1"
     show_cancelled = (request.form.get("show_cancelled") or "") == "1"
     show_completed = (request.form.get("show_completed") or "") == "1"
@@ -324,8 +410,9 @@ def manager_order_delete(order_id):
 
     conn = get_order_mgmt_db()
     ensure_order_list_schema(conn)
-    cur = conn.cursor()
+    cur  = conn.cursor()
 
+    # 查詢訂單目前狀態
     cur.execute("SELECT status FROM order_list WHERE order_id = ?", (order_id,))
     row = cur.fetchone()
 
@@ -334,8 +421,9 @@ def manager_order_delete(order_id):
         flash("找不到該訂單", "danger")
         return redirect(url_for("manager.manager_orders", **kwargs))
 
-    status = (row["status"] or "active")
+    status = row["status"] or "active"
 
+    # 狀態驗證
     if status == "cancelled":
         conn.close()
         flash("此訂單已被客戶取消，無法再拒絕。", "warning")
@@ -351,8 +439,9 @@ def manager_order_delete(order_id):
         flash("此訂單已拒絕，無法重複拒絕。", "warning")
         return redirect(url_for("manager.manager_orders", **kwargs))
 
+    # 更新訂單狀態為 rejected
     note_text = f"你的訂單已被工廠拒絕：{reason}"
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_str   = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     cur.execute(
         """
