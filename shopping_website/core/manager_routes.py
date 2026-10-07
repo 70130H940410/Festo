@@ -28,7 +28,6 @@ manager_bp = Blueprint("manager", __name__, url_prefix="/manager")
 def ensure_order_list_schema(conn):
     """
     確保 order_list 資料表有所有必要欄位（沒有就自動補上）。
-    檢查欄位：status、rejected_at、cancelled_at
     """
     cur = conn.cursor()
     try:
@@ -47,10 +46,38 @@ def ensure_order_list_schema(conn):
             cur.execute("ALTER TABLE order_list ADD COLUMN cancelled_at TEXT")
             changed = True
 
+        if "contact_name" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN contact_name TEXT")
+            changed = True
+
+        if "contact_phone" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN contact_phone TEXT")
+            changed = True
+
+        if "company" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN company TEXT")
+            changed = True
+
+        if "address" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN address TEXT")
+            changed = True
+
+        if "source" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN source TEXT DEFAULT 'web'")
+            changed = True
+
+        if "mes_ono" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN mes_ono INTEGER")
+            changed = True
+
+        if "supabase_order_id" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN supabase_order_id INTEGER")
+            changed = True
+
         if changed:
             conn.commit()
     except Exception:
-        pass  # 不讓 migration 影響頁面
+        pass
 
 
 # =============================================================
@@ -61,46 +88,23 @@ def ensure_order_list_schema(conn):
 @manager_required
 def manager_inventory():
     """
-    庫存管理頁面。
-    - GET : 顯示所有產品的庫存量
-    - POST: 直接修改指定產品的庫存數值
-            (product_id + new_stock 來自表單)
-    
-    注意：這裡修改的是 products.stock（成品庫存），
-    不是 raw_materials（原物料）。
+    庫存管理頁面（以工廠 ASRS 倉儲 32 格為單一事實來源 SSOT）。
     """
     error_message   = None
     success_message = None
 
-    conn = get_product_db()
-    cur  = conn.cursor()
-
-    if request.method == "POST":
-        try:
-            product_id = int(request.form.get("product_id", "0"))
-            new_stock  = int(request.form.get("new_stock", "0"))
-            # 庫存不可為負
-            if new_stock < 0:
-                new_stock = 0
-
-            cur.execute(
-                "UPDATE products SET stock = ? WHERE id = ?",
-                (new_stock, product_id),
-            )
-            conn.commit()
-            success_message = "✅ 庫存已更新"
-        except Exception as e:
-            conn.rollback()
-            error_message = f"❌ 更新失敗：{e}"
-
-    # 無論 GET/POST 都重新讀取最新庫存
-    cur.execute("SELECT id, name, base_price, stock FROM products ORDER BY id ASC")
-    products = cur.fetchall()
-    conn.close()
+    from .mes_data_service import MesDataService
+    
+    # 庫存以工廠 ASRS 倉儲為單一事實來源 (SSOT)
+    products = MesDataService.get_unified_products()
+    warehouse = MesDataService.get_warehouse_inventory()
+    buffer_positions = MesDataService.get_buffer_positions()
 
     return render_template(
         "manager/inventory.html",
         products=products,
+        warehouse=warehouse,
+        buffer_positions=buffer_positions,
         error_message=error_message,
         success_message=success_message,
     )
@@ -249,9 +253,17 @@ def manager_orders():
       cancelled       → 客戶取消
       rejected        → 管理者拒絕
     """
-    q    = request.args.get("q", "").strip()
-    step = request.args.get("step", "").strip()
-    tab  = request.args.get("tab", "active")  # 預設顯示 active 訂單
+    q      = request.args.get("q", "").strip()
+    step   = request.args.get("step", "").strip()
+    tab    = request.args.get("tab", "all")  # 預設顯示全部訂單以利查看所有來源
+    source = request.args.get("source", "").strip()
+
+    # 自動同步 Supabase line_orders，確保來自 LineTalker 的訂單即時顯示在網站上
+    try:
+        from .order_sync import sync_line_orders_to_order_list
+        sync_line_orders_to_order_list()
+    except Exception as e:
+        print(f"⚠️ [manager_orders] 同步 LineTalker 訂單異常: {e}")
 
     conn = get_order_mgmt_db()
     ensure_order_list_schema(conn)
@@ -262,11 +274,17 @@ def manager_orders():
         SELECT
             rowid AS id,
             order_id, date, customer_name, product, amount, total_price,
-            step_name, note, status, rejected_at, cancelled_at
+            step_name, note, status, rejected_at, cancelled_at,
+            contact_name, contact_phone, company, address, source, mes_ono
         FROM order_list
         WHERE 1=1
     """
     params = []
+
+    # 來源篩選 (line / web)
+    if source in ("line", "web"):
+        base_sql += " AND source = ? "
+        params.append(source)
 
     # 依 tab 篩選狀態
     if tab == "active":
@@ -277,7 +295,7 @@ def manager_orders():
         base_sql += " AND status IN ('cancelled', 'rejected') "
     elif tab == "pending_payment":
         base_sql += " AND status = 'pending_payment' "
-    # tab == "all" 時不加任何過濾
+    # tab == "all" 時不加狀態過濾
 
     # 關鍵字搜尋（數字時也搜 rowid）
     if q:
@@ -288,21 +306,27 @@ def manager_orders():
                 rowid = ?
                 OR order_id LIKE ?
                 OR customer_name LIKE ?
+                OR contact_name LIKE ?
+                OR contact_phone LIKE ?
+                OR company LIKE ?
                 OR product LIKE ?
                 OR note LIKE ?
               )
             """
-            params += [int(q), like, like, like, like]
+            params += [int(q), like, like, like, like, like, like, like]
         else:
             base_sql += """
               AND (
                 order_id LIKE ?
                 OR customer_name LIKE ?
+                OR contact_name LIKE ?
+                OR contact_phone LIKE ?
+                OR company LIKE ?
                 OR product LIKE ?
                 OR note LIKE ?
               )
             """
-            params += [like, like, like, like]
+            params += [like, like, like, like, like, like, like]
 
     # 製程步驟篩選
     if step:
@@ -332,6 +356,7 @@ def manager_orders():
         q=q,
         step=step,
         tab=tab,
+        source=source,
         steps=steps,
     )
 
@@ -355,7 +380,8 @@ def manager_order_detail(order_id):
         SELECT
             rowid AS id,
             order_id, date, customer_name, product, amount, total_price,
-            step_name, note, status, rejected_at, cancelled_at
+            step_name, note, status, rejected_at, cancelled_at,
+            contact_name, contact_phone, company, address, source, mes_ono
         FROM order_list
         WHERE order_id = ?
         """,

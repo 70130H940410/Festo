@@ -72,17 +72,64 @@
   </table>
 </div>
 
-<!-- 3. 操作按鈕 -->
+<!-- 3. 收件與配送聯絡資訊（統一工廠出貨資料） -->
 <div class="card">
-  <h3>下一步</h3>
+  <h3>📦 收件與配送聯絡資訊（統一工廠出貨資料）</h3>
+  <p class="text-muted">請填寫完整的收件資訊，本資料將同步至工廠 MES 排程與物流系統，與 Line 訂單格式統一。</p>
+  
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 10px;">
+    <div>
+      <label style="font-weight: bold; display: block; margin-bottom: 5px;">
+        <span style="color: #e74c3c;">*</span> 聯絡人姓名：
+      </label>
+      <input type="text" id="contact_name" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc;" 
+             value="{{ session.get('account', '') }}" placeholder="請輸入聯絡人姓名" required>
+    </div>
+
+    <div>
+      <label style="font-weight: bold; display: block; margin-bottom: 5px;">
+        <span style="color: #e74c3c;">*</span> 聯絡電話：
+      </label>
+      <input type="tel" id="contact_phone" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc;" 
+             placeholder="例如：0912-345-678" required>
+    </div>
+
+    <div>
+      <label style="font-weight: bold; display: block; margin-bottom: 5px;">
+        公司名稱 / 單位：
+      </label>
+      <input type="text" id="company" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc;" 
+             placeholder="例如：XX科技有限公司（個人請填個人）">
+    </div>
+
+    <div>
+      <label style="font-weight: bold; display: block; margin-bottom: 5px;">
+        訂單備註：
+      </label>
+      <input type="text" id="order_note" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc;" 
+             placeholder="例如：急件，請盡速安排出貨">
+    </div>
+  </div>
+
+  <div style="margin-top: 15px;">
+    <label style="font-weight: bold; display: block; margin-bottom: 5px;">
+      <span style="color: #e74c3c;">*</span> 送貨地址：
+    </label>
+    <input type="text" id="address" class="form-control" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid #ccc;" 
+           placeholder="請輸入詳細送貨地址（例如：桃園市中壢區中大路300號）" required>
+  </div>
+</div>
+
+<!-- 4. 操作按鈕 -->
+<div class="card">
+  <h3>確認送出</h3>
   <div class="mt-2 text-right">
     <a class="btn btn-secondary" href="{{ url_for('order.order_page') }}">
       返回修改
     </a>
     
-    <!-- 按鈕觸發 JS submitOrder() -->
     <button type="button" id="submitBtn" class="btn btn-primary btn-lg" onclick="submitOrder()">
-      點擊前往付費
+      送出訂單並前往付費
     </button>
   </div>
 </div>
@@ -102,37 +149,63 @@ function submitOrder() {
         return;
     }
 
-    // 2. 鎖定按鈕
-    btn.disabled = true;
-    btn.innerText = "處理中...";
+    // 2. 收集客戶聯絡資料
+    const contactName = document.getElementById("contact_name").value.trim();
+    const contactPhone = document.getElementById("contact_phone").value.trim();
+    const company = document.getElementById("company").value.trim();
+    const address = document.getElementById("address").value.trim();
+    const note = document.getElementById("order_note").value.trim();
 
-    // 3. 使用 fetch 發送 JSON 給後端 API
+    if (!contactName) {
+        alert("請填寫收件聯絡人姓名！");
+        document.getElementById("contact_name").focus();
+        return;
+    }
+    if (!contactPhone) {
+        alert("請填寫聯絡電話！");
+        document.getElementById("contact_phone").focus();
+        return;
+    }
+    if (!address) {
+        alert("請填寫送貨地址！");
+        document.getElementById("address").focus();
+        return;
+    }
+
+    // 3. 鎖定按鈕
+    btn.disabled = true;
+    btn.innerText = "訂單處理中...";
+
+    // 4. 使用 fetch 發送 JSON 給後端 API
     fetch("{{ url_for('order.submit_order_api') }}", {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
         },
         body: JSON.stringify({
-            "selected_steps": selectedSteps
+            "selected_steps": selectedSteps,
+            "contact_name": contactName,
+            "contact_phone": contactPhone,
+            "company": company,
+            "address": address,
+            "note": note
         })
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // 成功：跳轉到後端指定的網址
             window.location.href = data.redirect_url;
         } else {
-            // 失敗：顯示錯誤訊息
             alert("下單失敗：" + data.message);
             btn.disabled = false;
-            btn.innerText = "點擊前往付費";
+            btn.innerText = "送出訂單並前往付費";
         }
     })
     .catch(error => {
         console.error("Error:", error);
         alert("系統發生錯誤，請稍後再試。");
         btn.disabled = false;
-        btn.innerText = "點擊前往付費";
+        btn.innerText = "送出訂單並前往付費";
     });
 }
 </script>

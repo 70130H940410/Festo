@@ -14,7 +14,7 @@ import os
 import sys
 import time
 import pyodbc
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # ── Supabase SDK ──────────────────────────────────────────────
 try:
@@ -34,8 +34,8 @@ DEFAULT_LOCAL_DB = os.path.abspath(os.path.join(os.path.dirname(__file__), "data
 FESTO_DB_PATH = os.environ.get("FESTO_DB_PATH", DEFAULT_LOCAL_DB)
 
 # [修改點 B] Supabase 設定（貼上你的 Project URL 和 anon key）
-SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://your-project.supabase.co")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "your-anon-key")
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://lgnzcudrhvqhiichmqis.supabase.co")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "sb_publishable_yLkS2oqaUUEETl1ESDS9fg_8m2Uk9x4")
 
 # 同步間隔（秒）
 SYNC_INTERVAL = 3
@@ -104,92 +104,167 @@ def sync_dynamic_tables(sb: "Client", state: dict):
     acc = open_access()
     cur = acc.cursor()
 
-    # ── tblMachineReport（機台狀態，最重要）────────────────
-    last_id = state.get("machine_report_last_id", 0)
-    machine_last_state = state.setdefault("machine_last_state", {})
-    
-    cur.execute(
-        f"SELECT ID, ResourceID, TimeStamp, AutomaticMode, ManualMode, "
-        f"Busy, [Reset], ErrorL0, ErrorL1, ErrorL2 "
-        f"FROM tblMachineReport WHERE ID > {last_id} ORDER BY ID"
-    )
-    rows = cur.fetchall()
-    if rows:
-        data = []
-        for r in rows:
-            res_id = r[1]
-            # 狀態組合：(Auto, Manual, Busy, Reset, Err0, Err1, Err2)
-            current_state = (bool(r[3]), bool(r[4]), bool(r[5]), bool(r[6]), bool(r[7]), bool(r[8]), bool(r[9]))
-            
-            # [頻寬優化] 只有狀態發生改變，才需要上傳到雲端
-            if res_id not in machine_last_state or machine_last_state[res_id] != current_state:
-                machine_last_state[res_id] = current_state
-                ts = r[2]
-                data.append({
-                    "id": r[0], "resource_id": res_id,
-                    "timestamp": ts.isoformat() if ts else None,
-                    "automatic_mode": current_state[0], "manual_mode": current_state[1],
-                    "busy": current_state[2], "reset": current_state[3],
-                    "error_l0": current_state[4], "error_l1": current_state[5], "error_l2": current_state[6],
-                })
-        
-        # 即使很多列被過濾掉，我們依然要把 last_id 更新到最後一筆，避免下次重複掃描
-        state["machine_report_last_id"] = rows[-1][0]
-        
-        if data:
-            sb.table("tbl_machine_report").upsert(data, on_conflict="id").execute()
-            print(f"  [+] tblMachineReport: Uploaded {len(data)} changed rows (Filtered {len(rows)-len(data)} duplicates. Last ID={state['machine_report_last_id']})")
-        else:
-            print(f"  [-] tblMachineReport: No state changes in {len(rows)} new rows.")
-
-    # ── tblOrder（工單）──────────────────────────────────
+    # ── tblMachineReport（機台狀態：智能時間對齊）─────────────
     try:
-        last_ono = state.get("order_last_ono", 0)
+        # 1. 取得 Access 本機當前最新的一筆資料 (ID 與 TimeStamp)
+        cur.execute("SELECT TOP 1 ID, TimeStamp FROM tblMachineReport ORDER BY ID DESC")
+        latest_row = cur.fetchone()
+        access_max_id = int(latest_row[0] or 0) if latest_row else 0
+        access_latest_ts = latest_row[1] if latest_row else None
+
+        # 2. 智能時間對齊（Time Alignment）：若為首次啟動或定期校驗
+        last_alignment_check = state.get("last_alignment_check", 0)
+        now_ts = time.time()
+        
+        # 每 30 秒或初次啟動時，檢查雲端與本地是否產生時間倒退 (Rollback)
+        if now_ts - last_alignment_check > 30:
+            state["last_alignment_check"] = now_ts
+            try:
+                # 查詢雲端目前最大的一筆紀錄
+                sb_latest = sb.table("tbl_machine_report").select("id, timestamp").order("id", desc=True).limit(1).execute()
+                if sb_latest.data and len(sb_latest.data) > 0:
+                    sb_id = int(sb_latest.data[0]["id"])
+                    sb_ts_str = sb_latest.data[0].get("timestamp")
+
+                    # 情況 A：若雲端的 ID 明顯大於工廠目前的 ID（工廠資料庫被還原至舊版本）
+                    # 情況 B：若雲端時間比工廠最新時間更未來
+                    is_rollback = False
+                    if sb_id > access_max_id:
+                        is_rollback = True
+                    elif access_latest_ts and sb_ts_str:
+                        # 比較 ISO 時間
+                        acc_iso = access_latest_ts.isoformat() if hasattr(access_latest_ts, 'isoformat') else str(access_latest_ts)
+                        if sb_ts_str > acc_iso and sb_id != access_max_id:
+                            is_rollback = True
+
+                    if is_rollback:
+                        print(f"  [Time Alignment] 偵測到工廠資料庫版本還原！(工廠 Max ID: {access_max_id}, 雲端殘留 ID: {sb_id})")
+                        print(f"  [Time Alignment] 自動清理雲端 ID > {access_max_id} 的幽靈資料...")
+                        sb.table("tbl_machine_report").delete().gt("id", access_max_id).execute()
+                        state["machine_report_last_id"] = max(0, access_max_id - 50)
+            except Exception as align_err:
+                print(f"  [Time Alignment Warning] 對齊校驗失敗: {align_err}")
+
+        # 3. 確保本地同步指針不超越 Access 當前最大 ID
+        if "machine_report_last_id" not in state or state["machine_report_last_id"] > access_max_id:
+            state["machine_report_last_id"] = max(0, access_max_id - 50)
+            print(f"  [Init] 對齊工廠基準點，從 ID: {state['machine_report_last_id']} 開始同步")
+
+        last_id = state.get("machine_report_last_id", 0)
+
+        # 4. 抓取新增或變動的資料行 (ID > last_id)
         cur.execute(
-            f"SELECT ONo, PlanedStart, PlanedEnd, Start, [End], State, Enabled, CNo "
-            f"FROM tblOrder WHERE ONo > {last_ono} ORDER BY ONo"
+            f"SELECT TOP 500 ID, ResourceID, TimeStamp, AutomaticMode, ManualMode, "
+            f"Busy, [Reset], ErrorL0, ErrorL1, ErrorL2 "
+            f"FROM tblMachineReport WHERE ID > {last_id} ORDER BY ID"
+        )
+        rows = cur.fetchall()
+
+        # 5. 若無新資料，保底抓取當前各工站最新 30 筆（確保時間與狀態不斷線）
+        is_fallback = False
+        if not rows:
+            cur.execute(
+                "SELECT TOP 30 ID, ResourceID, TimeStamp, AutomaticMode, ManualMode, "
+                "Busy, [Reset], ErrorL0, ErrorL1, ErrorL2 "
+                "FROM tblMachineReport ORDER BY ID DESC"
+            )
+            rows = cur.fetchall()
+            is_fallback = True
+
+        if rows:
+            data = []
+            machine_snapshots = state.setdefault("machine_snapshots", {})
+            for r in rows:
+                row_id = int(r[0])
+                res_id = int(r[1] or 0)
+                cur_snap = (res_id, bool(r[3]), bool(r[4]), bool(r[5]), bool(r[6]), bool(r[7]), bool(r[8]), bool(r[9]))
+                
+                # 若為新序號或狀態有變化，則上傳
+                if not is_fallback or (res_id not in machine_snapshots or machine_snapshots[res_id] != cur_snap):
+                    machine_snapshots[res_id] = cur_snap
+                    ts = r[2]
+                    data.append({
+                        "id": row_id,
+                        "resource_id": res_id,
+                        "timestamp": ts.isoformat() if hasattr(ts, 'isoformat') else str(ts) if ts else None,
+                        "automatic_mode": bool(r[3]),
+                        "manual_mode": bool(r[4]),
+                        "busy": bool(r[5]),
+                        "reset": bool(r[6]),
+                        "error_l0": bool(r[7]),
+                        "error_l1": bool(r[8]),
+                        "error_l2": bool(r[9]),
+                    })
+
+            if not is_fallback and rows:
+                state["machine_report_last_id"] = int(rows[-1][0])
+            elif is_fallback and rows:
+                state["machine_report_last_id"] = int(rows[0][0])
+
+            if data:
+                sb.table("tbl_machine_report").upsert(data, on_conflict="id").execute()
+                print(f"  [+] tblMachineReport: 智能對齊並更新 {len(data)} 筆紀錄 (目前工廠 Max ID: {access_max_id})")
+    except Exception as e:
+        print(f"  [WARNING] tblMachineReport sync failed: {e}")
+
+    # ── tblOrder（工單：同步最新建立或狀態更新的訂單）─────────
+    try:
+        # 取最近 50 張工單，包含已存在的（狀態可能有更新，如 Start、End、State）
+        cur.execute(
+            "SELECT TOP 50 ONo, PlanedStart, PlanedEnd, Start, [End], State, Enabled, CNo "
+            "FROM tblOrder ORDER BY ONo DESC"
         )
         rows = cur.fetchall()
         if rows:
             data = []
+            order_snapshots = state.setdefault("order_snapshots", {})
             for r in rows:
-                data.append({
-                    "ono": r[0],
-                    "planed_start": r[1].isoformat() if r[1] else None,
-                    "planed_end": r[2].isoformat() if r[2] else None,
-                    "start": r[3].isoformat() if r[3] else None,
-                    "end": r[4].isoformat() if r[4] else None,
-                    "state": r[5], "enabled": bool(r[6]), "cno": r[7],
-                })
-            sb.table("tbl_order").upsert(data, on_conflict="ono").execute()
-            state["order_last_ono"] = rows[-1][0]
-            print(f"  [+] tblOrder: {len(rows)} new rows")
+                ono = r[0]
+                # 比對狀態是否有變動 (state, start, end, enabled)
+                cur_snap = (r[5], str(r[3]), str(r[4]), bool(r[6]))
+                if ono not in order_snapshots or order_snapshots[ono] != cur_snap:
+                    order_snapshots[ono] = cur_snap
+                    data.append({
+                        "ono": ono,
+                        "planed_start": r[1].isoformat() if r[1] else None,
+                        "planed_end": r[2].isoformat() if r[2] else None,
+                        "start": r[3].isoformat() if r[3] else None,
+                        "end": r[4].isoformat() if r[4] else None,
+                        "state": r[5], "enabled": bool(r[6]), "cno": r[7],
+                    })
+            if data:
+                sb.table("tbl_order").upsert(data, on_conflict="ono").execute()
+                print(f"  [+] tblOrder: {len(data)} orders updated")
     except Exception as e:
         print(f"  [WARNING] tblOrder sync failed: {e}")
 
-    # ── tblFinStep（已完工步驟）──────────────────────────
+    # ── tblFinStep（已完工步驟：取最近 100 筆更新）────────────
     try:
-        last_ono = state.get("fin_step_last_ono", 0)
         cur.execute(
-            f"SELECT TOP 50 WPNo, StepNo, ONo, Description, ResourceID, "
-            f"PlanedStart, PlanedEnd, Start, [End] "
-            f"FROM tblFinStep WHERE ONo > {last_ono} ORDER BY ONo DESC"
+            "SELECT TOP 100 WPNo, StepNo, ONo, Description, ResourceID, "
+            "PlanedStart, PlanedEnd, Start, [End] "
+            "FROM tblFinStep ORDER BY ONo DESC, StepNo DESC"
         )
         rows = cur.fetchall()
         if rows:
             data = []
+            finstep_snapshots = state.setdefault("finstep_snapshots", {})
             for r in rows:
-                data.append({
-                    "wp_no": r[0], "step_no": r[1], "ono": r[2],
-                    "description": r[3] or "", "resource_id": r[4] or 0,
-                    "planed_start": r[5].isoformat() if r[5] else None,
-                    "planed_end": r[6].isoformat() if r[6] else None,
-                    "start": r[7].isoformat() if r[7] else None,
-                    "end": r[8].isoformat() if r[8] else None,
-                })
-            sb.table("tbl_fin_step").upsert(data, on_conflict="ono,step_no").execute()
-            state["fin_step_last_ono"] = rows[0][2]  # latest ONo
-            print(f"  [+] tblFinStep: {len(rows)} new rows")
+                key = (r[2], r[1])  # (ono, step_no)
+                cur_snap = (str(r[7]), str(r[8])) # (start, end)
+                if key not in finstep_snapshots or finstep_snapshots[key] != cur_snap:
+                    finstep_snapshots[key] = cur_snap
+                    data.append({
+                        "wp_no": r[0], "step_no": r[1], "ono": r[2],
+                        "description": r[3] or "", "resource_id": r[4] or 0,
+                        "planed_start": r[5].isoformat() if r[5] else None,
+                        "planed_end": r[6].isoformat() if r[6] else None,
+                        "start": r[7].isoformat() if r[7] else None,
+                        "end": r[8].isoformat() if r[8] else None,
+                    })
+            if data:
+                sb.table("tbl_fin_step").upsert(data, on_conflict="ono,step_no").execute()
+                print(f"  [+] tblFinStep: {len(data)} steps updated")
     except Exception as e:
         print(f"  [WARNING] tblFinStep sync failed: {e}")
 
@@ -263,10 +338,67 @@ def sync_dynamic_tables(sb: "Client", state: dict):
     acc.close()
 
 
+# ── 下行訂單同步（從 Supabase line_orders 拉取新訂單下發至 Festo MES tblOrder）──
+def sync_orders_down_to_mes(sb: "Client", state: dict):
+    """
+    查詢 Supabase 中新確認的訂單（status='Confirmed'），
+    在工廠 Access FestoMES.accdb 中自動生成新工單 (ONo)，
+    並將產生之工廠 ONo 回寫至 Supabase 訂單狀態。
+    """
+    try:
+        resp = sb.table("line_orders").select("*").eq("status", "Confirmed").order("id").limit(10).execute()
+        orders = resp.data or []
+        if not orders:
+            return
+
+        acc = open_access()
+        cur = acc.cursor()
+
+        for order in orders:
+            order_id = order["id"]
+            contact_name = order.get("contact_name") or order.get("client_id")
+            print(f"  [MES Dispatch] 偵測到雲端新訂單 #{order_id} (客戶: {contact_name})，正在排入工廠 MES...")
+
+            # 1. 取得目前工廠 MAX ONo
+            cur.execute("SELECT MAX(ONo) FROM tblOrder")
+            max_row = cur.fetchone()
+            max_ono = int(max_row[0] or 0) if max_row and max_row[0] is not None else 0
+            new_ono = max_ono + 1
+
+            # 2. 預計開始與完工時間
+            now_dt = datetime.now()
+            plan_end_dt = now_dt + timedelta(minutes=15)
+
+            # 3. 寫入工廠真實 tblOrder (State=1 排定/待加工, Enabled=True)
+            cur.execute(
+                """
+                INSERT INTO tblOrder (ONo, PlanedStart, PlanedEnd, Start, [End], CNo, State, Enabled, Release)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (new_ono, now_dt, plan_end_dt, None, None, 1, 1, True, now_dt)
+            )
+
+            # 4. 回寫 Supabase 訂單狀態 (標註已下發的工廠 ONo)
+            new_status = f"In Production (MES ONo: {new_ono})"
+            sb.table("line_orders").update({"status": new_status}).eq("id", order_id).execute()
+            print(f"  [+] 成功下發訂單 #{order_id} 至工廠 MES！生成工單 ONo: {new_ono}，狀態已更新。")
+
+        acc.close()
+
+        # 5. 同步更新網站端本地 order_management.db
+        try:
+            from core.order_sync import sync_line_orders_to_order_list
+            sync_line_orders_to_order_list()
+        except Exception as e:
+            pass
+    except Exception as e:
+        print(f"  [WARNING] 下行訂單同步失敗: {e}")
+
+
 # ── 主程式 ────────────────────────────────────────────────────
 def main():
     print("=" * 55)
-    print("  Festo MES Sync Agent")
+    print("  Festo MES Sync Agent (Two-Way Sync)")
     print(f"  Access DB : {FESTO_DB_PATH}")
     print(f"  Supabase  : {SUPABASE_URL}")
     print(f"  Interval  : {SYNC_INTERVAL}s")
@@ -291,6 +423,7 @@ def main():
     while True:
         try:
             sync_dynamic_tables(sb, state)
+            sync_orders_down_to_mes(sb, state)
         except pyodbc.Error as e:
             print(f"[WARNING] Access error: {e}")
         except Exception as e:

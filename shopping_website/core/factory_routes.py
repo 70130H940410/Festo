@@ -548,7 +548,7 @@ def _tick_once_for_order(
 
     # 步驟 3：檢查整張訂單是否完成
     o = order_db.execute(
-        "SELECT step_name, amount FROM order_list WHERE order_id=?",
+        "SELECT step_name, amount, mes_ono, supabase_order_id, source FROM order_list WHERE order_id=?",
         (focus_order_id,),
     ).fetchone()
     if o:
@@ -564,6 +564,30 @@ def _tick_once_for_order(
                     (_COMPLETE_STATUS, focus_order_id),
                 )
                 order_db.commit()
+
+                # 同步回寫雲端 Supabase (tbl_order 與 line_orders)
+                try:
+                    from core.db import get_supabase_client
+                    from datetime import datetime
+                    sb = get_supabase_client()
+                    if sb:
+                        now_iso = datetime.now().isoformat()
+                        mes_ono = o["mes_ono"]
+                        sb_order_id = o["supabase_order_id"]
+                        if mes_ono:
+                            sb.table("tbl_order").update({
+                                "state": 3,
+                                "end": now_iso,
+                            }).eq("ono", mes_ono).execute()
+                            print(f"🏁 [MES Complete] 工單 ONo: {mes_ono} (訂單: {focus_order_id}) 已在 MES 標記為完工！")
+
+                        if sb_order_id:
+                            sb.table("line_orders").update({
+                                "status": "Completed"
+                            }).eq("id", sb_order_id).execute()
+                            print(f"🎉 [LINE Order Complete] Supabase 訂單 #{sb_order_id} 狀態已同步為 Completed！")
+                except Exception as e:
+                    print(f"⚠️ [Order Complete Sync Warning] {e}")
 
     # 步驟 4：SSE 廣播（有變動才廣播）
     if completed_count > 0 or len(dispatched) > 0:
@@ -945,12 +969,20 @@ def _tick_all_active_orders(app) -> None:
             # 先完成所有到點的工作
             _complete_due_jobs(order_db)
 
-            # 找出所有進行中訂單，逐一推進
+            # 找出所有進行中訂單，逐一確保已初始化步驟並推進
             active_orders = order_db.execute(
-                "SELECT order_id FROM order_list WHERE status='active'"
+                "SELECT order_id, step_name, amount FROM order_list WHERE status='active'"
             ).fetchall()
             for row in active_orders:
                 order_id = row["order_id"]
+                step_name = row["step_name"] or "1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9"
+                chain = _parse_step_chain(step_name)
+                try:
+                    amount = max(1, int(row["amount"] or 1))
+                except Exception:
+                    amount = 1
+                if chain:
+                    _ensure_piece_rows(order_db, order_id, chain, amount)
                 _tick_once_for_order(order_db, product_db, order_id)
         except Exception as e:
             print(f"[Factory Scheduler Error] {e}")

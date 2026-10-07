@@ -13,6 +13,15 @@ import os
 import sqlite3
 import threading
 
+# ── 載入 .env 環境變數 ─────────────────────────────────────────
+try:
+    from dotenv import load_dotenv
+    _env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+    if os.path.exists(_env_path):
+        load_dotenv(_env_path)
+except ImportError:
+    pass
+
 # ── Supabase SDK（選用）──────────────────────────────────────
 try:
     from supabase import create_client as _sb_create

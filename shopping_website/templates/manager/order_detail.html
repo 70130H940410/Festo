@@ -12,13 +12,25 @@
     <table>
       <tbody>
         <tr><th>訂單ID</th><td>{{ order["order_id"] }}</td></tr>
-        <tr><th>時間</th><td>{{ order["date"] }}</td></tr>
-        <tr><th>客戶</th><td>{{ order["customer_name"] }}</td></tr>
+        <tr><th>來源</th><td>
+          {% if order['source'] == 'line' %}
+            <span class="badge" style="background: #2ecc71; color: white; padding: 2px 8px; border-radius: 4px;">LINE</span>
+          {% else %}
+            <span class="badge" style="background: #3498db; color: white; padding: 2px 8px; border-radius: 4px;">WEB</span>
+          {% endif %}
+        </td></tr>
+        <tr><th>工廠MES工單(ONo)</th><td>{{ order["mes_ono"] or "排產同步中" }}</td></tr>
+        <tr><th>下單時間</th><td>{{ order["date"] }}</td></tr>
+        <tr><th>下單帳號</th><td>{{ order["customer_name"] }}</td></tr>
+        <tr><th>聯絡人姓名</th><td><strong>{{ order["contact_name"] or order["customer_name"] }}</strong></td></tr>
+        <tr><th>聯絡電話</th><td>{{ order["contact_phone"] or "—" }}</td></tr>
+        <tr><th>公司名稱</th><td>{{ order["company"] or "—" }}</td></tr>
+        <tr><th>送貨地址</th><td>{{ order["address"] or "—" }}</td></tr>
         <tr><th>產品</th><td>{{ order["product"] }}</td></tr>
-        <tr><th>數量</th><td>{{ order["amount"] }}</td></tr>
-        <tr><th>總價</th><td>{{ order["total_price"] }}</td></tr>
-        <tr><th>製程狀態</th><td>{{ order["step_name"] }}</td></tr>
-        <tr><th>備註</th><td>{{ order["note"] }}</td></tr>
+        <tr><th>數量</th><td>{{ order["amount"] }} 件</td></tr>
+        <tr><th>總價</th><td>${{ order["total_price"] }}</td></tr>
+        <tr><th>製程規劃</th><td>{{ order["step_name"] }}</td></tr>
+        <tr><th>備註</th><td>{{ order["note"] or "無備註" }}</td></tr>
       </tbody>
     </table>
   </div>

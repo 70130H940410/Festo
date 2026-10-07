@@ -505,7 +505,7 @@ class MesDataService:
                 for r in (res_resp.data or []):
                     m_resp = sb.table("tbl_machine_report").select(
                         "automatic_mode,manual_mode,busy,error_l0"
-                    ).eq("resource_id", r["resource_id"]).order("id", desc=True).limit(1).execute()
+                    ).eq("resource_id", r["resource_id"]).order("timestamp", desc=True).order("id", desc=True).limit(1).execute()
                     m = m_resp.data[0] if m_resp.data else None
                     machines.append({
                         "resource_id": r["resource_id"],
@@ -776,3 +776,124 @@ class MesDataService:
                  "quantity_max": 0, "time_stamp": "", "pallet_id": 0}
                 for i in range(1, 33)
             ]
+
+    # --- Warehouse & Unified Stock (SSOT: Festo ASRS tblBufferPos) ---
+
+    @staticmethod
+    def get_warehouse_inventory() -> Dict[str, Any]:
+        """
+        從 ASRS 倉儲（tbl_buffer_pos 32 格）即時計算各顏色保險絲盒庫存。
+        工廠單一事實來源（SSOT）：
+          - f_no=210 → 黑色 (Basic Fuse Box - Black)
+          - f_no=410 → 藍色 (Basic Fuse Box - Blue)
+          - f_no=610 → 白色 (Basic Fuse Box - White)
+          - f_no=0   → 空位
+          - f_no=25  → 空托盤（不計入成品庫存）
+        """
+        positions = MesDataService.get_buffer_positions()
+
+        fno_to_name = {
+            210: "Basic Fuse Box - Black",
+            410: "Basic Fuse Box - Blue",
+            610: "Basic Fuse Box - White",
+        }
+
+        inventory = {
+            "Basic Fuse Box - Black": {"count": 0, "positions": [], "f_no": 210, "product_id": 1},
+            "Basic Fuse Box - Blue":  {"count": 0, "positions": [], "f_no": 410, "product_id": 2},
+            "Basic Fuse Box - White": {"count": 0, "positions": [], "f_no": 610, "product_id": 3},
+            "empty": {"count": 0, "positions": []},
+            "pallet_only": {"count": 0, "positions": []},
+            "total_capacity": 32,
+            "total_occupied": 0,
+        }
+
+        for pos in positions:
+            f_no = int(pos.get("f_no", 0))
+            buf_pos = int(pos.get("buf_pos", 0))
+
+            if f_no in fno_to_name:
+                pname = fno_to_name[f_no]
+                inventory[pname]["count"] += 1
+                inventory[pname]["positions"].append(buf_pos)
+            elif f_no == 25:
+                inventory["pallet_only"]["count"] += 1
+                inventory["pallet_only"]["positions"].append(buf_pos)
+            else:
+                inventory["empty"]["count"] += 1
+                inventory["empty"]["positions"].append(buf_pos)
+
+        inventory["total_occupied"] = sum(
+            inventory[pname]["count"] for pname in fno_to_name.values()
+        )
+        return inventory
+
+    @staticmethod
+    def get_unified_products() -> List[Dict[str, Any]]:
+        """
+        取得統一產品清單：
+        總庫存 = ASRS 庫存 (現貨) + 未入倉儲庫存 (待入庫)
+        對客顯示與預設下單上限一律以總庫存為準。
+        """
+        wh = MesDataService.get_warehouse_inventory()
+
+        # 讀取未入倉儲庫存（來自 product.db 的 products 表）
+        unwarehoused_stocks: Dict[int, int] = {}
+        try:
+            from .db import get_product_db
+            conn_prod = get_product_db()
+            cur = conn_prod.cursor()
+            cur.execute("SELECT id, stock FROM products")
+            for row in cur.fetchall():
+                unwarehoused_stocks[int(row["id"])] = int(row["stock"] or 0)
+            conn_prod.close()
+        except Exception as e:
+            print(f"⚠️ [MesDataService] 讀取 product.db 庫存失敗: {e}")
+
+        product_defs = [
+            {
+                "id": 1,
+                "name": "Basic Fuse Box - Black",
+                "f_no": 210,
+                "description": "黑色上蓋標準保險絲盒",
+                "base_price": 100,
+            },
+            {
+                "id": 2,
+                "name": "Basic Fuse Box - Blue",
+                "f_no": 410,
+                "description": "藍色上蓋標準保險絲盒",
+                "base_price": 100,
+            },
+            {
+                "id": 3,
+                "name": "Basic Fuse Box - White",
+                "f_no": 610,
+                "description": "白色上蓋標準保險絲盒",
+                "base_price": 100,
+            },
+        ]
+
+        products = []
+        for p in product_defs:
+            stock_info = wh.get(p["name"], {})
+            asrs_stock = stock_info.get("count", 0)
+            # 未入倉儲庫存：從 product.db 取，若無則預設
+            unwarehoused = unwarehoused_stocks.get(p["id"], 0)
+            total_stock = asrs_stock + unwarehoused
+
+            products.append({
+                "id": p["id"],
+                "name": p["name"],
+                "f_no": p["f_no"],
+                "description": p["description"],
+                "base_price": p["base_price"],
+                "stock": total_stock,                      # 預設對客顯示庫存：總庫存 (ASRS + 未入倉)
+                "total_stock": total_stock,                # 總庫存
+                "asrs_stock": asrs_stock,                  # ASRS 實體倉儲在庫
+                "unwarehoused_stock": unwarehoused,        # 未入倉儲庫存
+                "warehouse_positions": stock_info.get("positions", []),
+            })
+        return products
+
+

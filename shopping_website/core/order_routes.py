@@ -27,6 +27,7 @@ from flask import (
 from datetime import datetime, timedelta
 import time
 import sqlite3
+import json
 
 from . import login_required
 from .db import get_product_db, get_order_mgmt_db
@@ -49,6 +50,13 @@ def ensure_order_list_schema(conn):
       - rejected_at      : 被拒絕的時間戳
       - cancelled_at     : 被取消的時間戳
       - estimated_delivery: 預估交期
+      - contact_name     : 聯絡人姓名
+      - contact_phone    : 聯絡電話
+      - company          : 公司名稱
+      - address          : 送貨地址
+      - source           : 訂單來源 (web / line)
+      - mes_ono          : 工廠 MES 工單編號 (ONo)
+      - supabase_order_id: 雲端訂單 ID
     """
     cur = conn.cursor()
     try:
@@ -71,11 +79,38 @@ def ensure_order_list_schema(conn):
             cur.execute("ALTER TABLE order_list ADD COLUMN estimated_delivery TEXT")
             changed = True
 
+        if "contact_name" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN contact_name TEXT")
+            changed = True
+
+        if "contact_phone" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN contact_phone TEXT")
+            changed = True
+
+        if "company" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN company TEXT")
+            changed = True
+
+        if "address" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN address TEXT")
+            changed = True
+
+        if "source" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN source TEXT DEFAULT 'web'")
+            changed = True
+
+        if "mes_ono" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN mes_ono INTEGER")
+            changed = True
+
+        if "supabase_order_id" not in cols:
+            cur.execute("ALTER TABLE order_list ADD COLUMN supabase_order_id INTEGER")
+            changed = True
+
         if changed:
             conn.commit()
-    except Exception:
-        # 不讓 migration 錯誤影響頁面（例如資料表不存在的狀況）
-        pass
+    except Exception as e:
+        print("Schema migration warning:", e)
 
 
 # =============================================================
@@ -95,30 +130,9 @@ def order_page():
       2. 數量不可超過庫存
       3. 至少要選一樣產品
     """
-    # 不管 GET/POST 都先把產品列表抓出來
-    conn = get_product_db()
-    cur  = conn.cursor()
-    cur.execute(
-        """
-        SELECT id, name, description, base_price, stock
-        FROM products
-        ORDER BY id
-        """
-    )
-    rows = cur.fetchall()
-    conn.close()
-
-    # 轉成字典列表，給模板使用
-    products = [
-        {
-            "id":          row["id"],
-            "name":        row["name"],
-            "description": row["description"],
-            "base_price":  row["base_price"],
-            "stock":       row["stock"],
-        }
-        for row in rows
-    ]
+    # 不管 GET/POST 都從工廠 ASRS 倉儲讀取統一產品與即時庫存 (SSOT)
+    from .mes_data_service import MesDataService
+    products = MesDataService.get_unified_products()
 
     error_message = None
 
@@ -288,8 +302,22 @@ def submit_order_api():
     conn_prod  = None
 
     try:
-        data               = request.get_json()
+        data               = request.get_json() or {}
         selected_steps_ids = data.get("selected_steps", [])  # 使用者選的製程步驟 ID 列表
+
+        # 收集並驗證統一客戶聯絡資訊
+        contact_name  = (data.get("contact_name") or "").strip() or session.get("account", "Guest")
+        contact_phone = (data.get("contact_phone") or "").strip()
+        company       = (data.get("company") or "").strip() or "個人"
+        address       = (data.get("address") or "").strip()
+        note          = (data.get("note") or "").strip() or "無備註"
+
+        if not contact_name:
+            return jsonify({"success": False, "message": "請填寫收件聯絡人姓名！"}), 400
+        if not contact_phone:
+            return jsonify({"success": False, "message": "請填寫聯絡電話！"}), 400
+        if not address:
+            return jsonify({"success": False, "message": "請填寫送貨地址！"}), 400
 
         # 確認購物車不為空
         cart_items = session.get("current_order_items")
@@ -298,6 +326,21 @@ def submit_order_api():
 
         customer_name = session.get("account", "Guest")
 
+        # ------
+        # 步驟 1：依據工廠 ASRS 倉儲真實在庫量校驗庫存 (SSOT)
+        # ------
+        from .mes_data_service import MesDataService
+        wh_inv = MesDataService.get_warehouse_inventory()
+        for item in cart_items:
+            pname = item.get("name")
+            req_qty = item.get("quantity", 0)
+            avail_stock = wh_inv.get(pname, {}).get("count", 0)
+            if req_qty > avail_stock:
+                return jsonify({
+                    "success": False,
+                    "message": f"工廠 ASRS 倉儲庫存不足！[{pname}] 目前在庫庫存僅剩 {avail_stock} 件，請重新調整數量。"
+                }), 400
+
         conn_prod  = get_product_db()
         conn_order = get_order_mgmt_db()
         ensure_order_list_schema(conn_order)  # 自動補欄位
@@ -305,9 +348,7 @@ def submit_order_api():
         cur_prod  = conn_prod.cursor()
         cur_order = conn_order.cursor()
 
-        # ------
-        # 步驟 1：計算總價 + 驗證/扣除 BOM 原物料庫存
-        # ------
+        # 計算總價 + 驗證/扣除 BOM 原物料庫存
         total_price   = 0
         product_names = []
 
@@ -342,7 +383,7 @@ def submit_order_api():
                         f"(需 {required}，剩餘 {rm['stock']})，"
                         f"無法生產產品 [{prod_row['name']}]"
                     )
-                # 扣除原料庫存（尚未 commit，失敗可 rollback）
+                # 扣除原料庫存
                 cur_prod.execute(
                     "UPDATE raw_materials SET stock = stock - ? WHERE id = ?",
                     (required, rm["id"]),
@@ -356,12 +397,12 @@ def submit_order_api():
         total_amount = sum(item["quantity"] for item in cart_items)
 
         # ------
-        # 步驟 2：把製程步驟 ID 串接成字串（格式：1 -> 2 -> 3）
+        # 步驟 2：把製程步驟 ID 串接成字串
         # ------
-        step_name_str = " -> ".join(map(str, selected_steps_ids))
+        step_name_str = " -> ".join(map(str, selected_steps_ids)) if selected_steps_ids else "1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7 -> 8 -> 9"
 
         # ------
-        # 步驟 3：計算預估交期（製程總秒數 × 總件數）
+        # 步驟 3：計算預估交期
         # ------
         total_estimated_sec = 0
         for step_id in selected_steps_ids:
@@ -378,10 +419,9 @@ def submit_order_api():
         estimated_delivery_str   = estimated_delivery_dt.strftime("%Y-%m-%d %H:%M:%S")
 
         # ------
-        # 步驟 4：寫入訂單（狀態：pending_payment，等待付款）
+        # 步驟 4：寫入 order_management.db 的 order_list（含統一聯絡人資訊）
         # ------
         order_date      = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        note            = "無備註"
         custom_order_id = generate_order_id(conn_order)
 
         cur_order.execute(
@@ -389,8 +429,9 @@ def submit_order_api():
             INSERT INTO order_list (
                 order_id, date, customer_name, product,
                 amount, total_price, step_name, note,
-                status, estimated_delivery
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                status, estimated_delivery,
+                contact_name, contact_phone, company, address, source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 custom_order_id,
@@ -401,8 +442,13 @@ def submit_order_api():
                 total_price,
                 step_name_str,
                 note,
-                "pending_payment",    # 下單後需等待付款才進入工廠排程
+                "pending_payment",
                 estimated_delivery_str,
+                contact_name,
+                contact_phone,
+                company,
+                address,
+                "web",
             ),
         )
 
@@ -410,20 +456,55 @@ def submit_order_api():
         conn_order.commit()
 
         # ------
-        # 步驟 5：同步寫入 FestoMES.accdb（失敗不中斷主流程）
+        # 步驟 5：同步寫入雲端統一訂單 (Supabase line_orders)
+        # ------
+        try:
+            from core.db import get_supabase_client
+            sb = get_supabase_client()
+            if sb:
+                sb_items_payload = {
+                    "order_items": [
+                        {"product_name": item["name"], "quantity": item["quantity"], "unit_price": item.get("unit_price", 100)}
+                        for item in cart_items
+                    ],
+                    "source": "web",
+                    "web_order_id": custom_order_id,
+                    "note": note,
+                    "process_steps": step_name_str,
+                }
+                sb_order = {
+                    "client_id": f"web:{customer_name}",
+                    "items": json.dumps(sb_items_payload, ensure_ascii=False),
+                    "contact_name": contact_name,
+                    "contact_phone": contact_phone,
+                    "company": company,
+                    "address": address,
+                    "total_price": total_price,
+                    "status": "Confirmed",  # 待工廠 sync_agent 轉為 In Production (MES ONo)
+                    "created_at": datetime.now().isoformat(),
+                }
+                resp = sb.table("line_orders").insert(sb_order).execute()
+                if resp.data:
+                    sb_id = resp.data[0].get("id")
+                    cur_order.execute("UPDATE order_list SET supabase_order_id = ? WHERE order_id = ?", (sb_id, custom_order_id))
+                    conn_order.commit()
+                    print(f"✅ [Supabase] 網站訂單已寫入雲端 (ID: {sb_id})")
+        except Exception as sb_e:
+            print(f"⚠️ [Supabase] 網站訂單同步雲端失敗: {sb_e}")
+
+        # ------
+        # 步驟 6：若有直接 Access 連線，嘗試寫入 FestoMES.accdb
         # ------
         try:
             from core.db import get_festo_db
             conn_festo  = get_festo_db()
             cur_festo   = conn_festo.cursor()
 
-            # 取得目前 MAX ONo，新 ONo = MAX + 1
             cur_festo.execute("SELECT MAX(ONo) FROM tblOrder")
             max_row   = cur_festo.fetchone()
             max_ono   = max_row[0] if max_row and max_row[0] is not None else 0
             new_ono   = max_ono + 1
 
-            # 寫入 tblOrder（State=1, Enabled=True）
             cur_festo.execute(
                 """
                 INSERT INTO tblOrder (ONo, PlanedStart, PlanedEnd, Start, End, CNo, State, Enabled, Release)
@@ -433,9 +514,11 @@ def submit_order_api():
             )
             conn_festo.commit()
             conn_festo.close()
+            cur_order.execute("UPDATE order_list SET mes_ono = ? WHERE order_id = ?", (new_ono, custom_order_id))
+            conn_order.commit()
         except Exception as e:
-            # Festo MES 連線失敗只印警告，不中斷下單流程
-            print(f"Warning: Failed to sync order to FestoMES.accdb: {e}")
+            # Festo MES 連線失敗由 sync_agent.py 接續同步
+            pass
 
         # 清空購物車 session
         session.pop("current_order_items", None)

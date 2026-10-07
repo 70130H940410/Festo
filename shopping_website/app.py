@@ -98,6 +98,14 @@ def create_app() -> Flask:
                 pass  # 前端斷線時 Python 會丟出 GeneratorExit，直接忽略
         return Response(event_stream(), mimetype="text/event-stream")
 
+    from flask import send_file
+    @app.route("/download/Festo_Cloud_Update.zip")
+    def download_festo_update():
+        zip_path = "/workspace/Festo_Cloud_Update.zip"
+        if os.path.exists(zip_path):
+            return send_file(zip_path, as_attachment=True, download_name="Festo_Cloud_Update.zip")
+        return "File not found", 404
+
     # -------------------------
     # 全域模板變數（所有 HTML 模板都能使用）
     # -------------------------
@@ -123,15 +131,32 @@ def create_app() -> Flask:
 def background_factory_worker(app: Flask):
     """
     背景執行緒，每秒執行一次，推進所有 active 訂單的工廠排程進度。
-    這樣即使前端沒有打 API tick，訂單也會自動推進。
+    每 3 秒自動同步雲端訂單並下發至工廠 MES，實現免手動介入的全自動生產運作。
     """
     from core.factory_routes import _tick_all_active_orders
+    from core.order_sync import sync_line_orders_to_order_list, dispatch_active_orders_to_mes
+
+    sync_counter = 0
     while True:
         try:
+            sync_counter += 1
+            # 每 3 秒同步一次 LINE 訂單並自動下發到工廠 MES
+            if sync_counter % 3 == 0:
+                with app.app_context():
+                    try:
+                        sync_line_orders_to_order_list()
+                    except Exception as se:
+                        pass
+                    try:
+                        dispatch_active_orders_to_mes()
+                    except Exception as de:
+                        pass
+
             _tick_all_active_orders(app)
         except Exception as e:
             print(f"Background worker error: {e}")
         time.sleep(1)  # 每 1 秒執行一次
+
 
 
 # =============================================================

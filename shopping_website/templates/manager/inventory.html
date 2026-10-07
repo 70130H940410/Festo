@@ -1,50 +1,144 @@
 {% extends "base.html" %}
-{% block title %}庫存管理{% endblock %}
+{% block title %}庫存管理 - 工廠 ASRS 倉儲實體庫存{% endblock %}
 
 {% block content %}
-<h2>庫存管理</h2>
-<p class="text-muted">直接管理 product DB 的 products.stock。</p>
+<style>
+  .stock-pos { font-size: 1.2rem; font-weight: bold; color: #27ae60; }
+  .stock-zero { font-size: 1.2rem; font-weight: bold; color: #e74c3c; }
+  
+  .grid-cell {
+    border-radius: 8px;
+    padding: 10px 5px;
+    text-align: center;
+    border: 1px solid #ccc;
+    background: #ffffff;
+    color: #333333;
+  }
+  .grid-cell.cell-210 { background: #2c3e50; color: #ffffff; border-color: #1a252f; }
+  .grid-cell.cell-410 { background: #2980b9; color: #ffffff; border-color: #1f618d; }
+  .grid-cell.cell-610 { background: #ecf0f1; color: #2c3e50; border-color: #bdc3c7; }
+  .grid-cell.cell-25  { background: #fef5e7; color: #d35400; border-color: #f39c12; }
+  .grid-cell.cell-0   { background: #ffffff; color: #95a5a6; border-color: #e0e0e0; }
+</style>
 
-{% if error_message %}
-  <div class="alert alert-error">{{ error_message }}</div>
-{% endif %}
-{% if success_message %}
-  <div class="alert alert-success">{{ success_message }}</div>
-{% endif %}
+<div style="display: flex; justify-content: space-between; align-items: center;">
+  <h2>🏭 庫存管理（單一事實來源：Festo ASRS 立體倉儲）</h2>
+  <span class="badge" style="background: #27ae60; color: white; padding: 6px 12px; border-radius: 12px; font-weight: bold;">
+    實時與工廠 MES 連線
+  </span>
+</div>
+<p class="text-muted">
+  本頁直接對齊工廠 ASRS 立體倉儲（32 格貨位 <code>tblBufferPos</code>），網站與 LINE 客服均以此數據為唯一準則。
+</p>
 
-<table>
-  <thead>
-    <tr>
-      <th>ID</th>
-      <th>商品名稱</th>
-      <th>單價</th>
-      <th>目前庫存</th>
-      <th>修改庫存</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% if products and products|length > 0 %}
+<!-- 倉儲總覽統計卡片 -->
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0;">
+  <div class="card" style="border-left: 4px solid #3498db; margin: 0;">
+    <div style="font-size: 0.9rem; color: #7f8c8d;">總倉位容量</div>
+    <div style="font-size: 1.8rem; font-weight: bold; margin-top: 5px;">{{ warehouse.total_capacity }} 格</div>
+  </div>
+  <div class="card" style="border-left: 4px solid #2ecc71; margin: 0;">
+    <div style="font-size: 0.9rem; color: #7f8c8d;">已存放成品</div>
+    <div style="font-size: 1.8rem; font-weight: bold; color: #27ae60; margin-top: 5px;">{{ warehouse.total_occupied }} 件</div>
+  </div>
+  <div class="card" style="border-left: 4px solid #f39c12; margin: 0;">
+    <div style="font-size: 0.9rem; color: #7f8c8d;">空托盤待加工</div>
+    <div style="font-size: 1.8rem; font-weight: bold; color: #e67e22; margin-top: 5px;">{{ warehouse.pallet_only.count }} 格</div>
+  </div>
+  <div class="card" style="border-left: 4px solid #95a5a6; margin: 0;">
+    <div style="font-size: 0.9rem; color: #7f8c8d;">可用空倉位</div>
+    <div style="font-size: 1.8rem; font-weight: bold; color: #7f8c8d; margin-top: 5px;">{{ warehouse.empty.count }} 格</div>
+  </div>
+</div>
+
+<!-- 產品庫存表格 -->
+<div class="card">
+  <h3>📦 各顏色成品庫存盤點 (總庫存 = ASRS庫存 + 未入倉儲庫存)</h3>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 80px;">MES代碼</th>
+        <th>產品名稱</th>
+        <th>外觀規格</th>
+        <th>單價 (NT$)</th>
+        <th>ASRS 實體在庫</th>
+        <th>未入倉儲庫存</th>
+        <th>總庫存 (對客顯示)</th>
+        <th>佔用倉位編號</th>
+      </tr>
+    </thead>
+    <tbody>
       {% for p in products %}
         <tr>
-          <td>{{ p["id"] }}</td>
-          <td>{{ p["name"] }}</td>
-          <td>{{ p["base_price"] }}</td>
-          <td>{{ p["stock"] }}</td>
+          <td><span class="badge" style="background: #34495e; color: white; padding: 3px 8px; border-radius: 4px;">PNo {{ p.f_no }}</span></td>
+          <td><strong>{{ p.name }}</strong></td>
+          <td>{{ p.description }}</td>
+          <td>${{ p.base_price }}</td>
           <td>
-            <form method="post" style="display:flex; gap:8px; align-items:center;">
-              <input type="hidden" name="product_id" value="{{ p['id'] }}">
-              <input type="number" name="new_stock" min="0" value="{{ p['stock'] }}">
-              <button type="submit">儲存</button>
-            </form>
+            <span class="badge" style="background: #e8f8f5; color: #16a085; font-size: 0.95rem; font-weight: bold; border: 1px solid #a3e4d7;">
+              {{ p.asrs_stock }} 件
+            </span>
+          </td>
+          <td>
+            <span class="badge" style="background: #fef9e7; color: #d35400; font-size: 0.95rem; font-weight: bold; border: 1px solid #f9e79f;">
+              {{ p.unwarehoused_stock }} 件
+            </span>
+          </td>
+          <td>
+            <span class="{% if p.total_stock > 0 %}stock-pos{% else %}stock-zero{% endif %}" style="font-size: 1.15rem;">
+              {{ p.total_stock }} 件
+            </span>
+          </td>
+          <td>
+            {% if p.warehouse_positions %}
+              <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+                {% for pos in p.warehouse_positions %}
+                  <span style="background: #ecf0f1; border: 1px solid #bdc3c7; border-radius: 3px; padding: 2px 6px; font-size: 0.85rem;">
+                    #{{ pos }}
+                  </span>
+                {% endfor %}
+              </div>
+            {% else %}
+              <span class="text-muted">暫無倉位</span>
+            {% endif %}
           </td>
         </tr>
       {% endfor %}
-    {% else %}
-      <tr>
-        <td colspan="5" class="text-center text-muted">products 沒有資料</td>
-      </tr>
-    {% endif %}
-  </tbody>
-</table>
-{% endblock %}
+    </tbody>
+  </table>
+</div>
 
+<!-- ASRS 32 格視覺化網格 -->
+<div class="card" style="margin-top: 20px;">
+  <h3>🗺️ ASRS 立體倉庫 32 格位實時圖</h3>
+  <div style="display: flex; gap: 15px; margin-bottom: 12px; font-size: 0.85rem;">
+    <span><span style="display:inline-block; width:12px; height:12px; background:#2c3e50; border-radius:2px; margin-right:4px;"></span>黑色(210)</span>
+    <span><span style="display:inline-block; width:12px; height:12px; background:#2980b9; border-radius:2px; margin-right:4px;"></span>藍色(410)</span>
+    <span><span style="display:inline-block; width:12px; height:12px; background:#ecf0f1; border:1px solid #7f8c8d; border-radius:2px; margin-right:4px;"></span>白色(610)</span>
+    <span><span style="display:inline-block; width:12px; height:12px; background:#fef5e7; border:1px solid #f39c12; border-radius:2px; margin-right:4px;"></span>空托盤(25)</span>
+    <span><span style="display:inline-block; width:12px; height:12px; background:#fff; border:1px dashed #bbb; border-radius:2px; margin-right:4px;"></span>空位(0)</span>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 10px;">
+    {% for pos in buffer_positions %}
+      {% set fno = pos.f_no %}
+      <div class="grid-cell cell-{{ fno }}">
+        <div style="font-size: 0.75rem; opacity: 0.8;">格位 #{{ pos.buf_pos }}</div>
+        <div style="font-weight: bold; margin-top: 4px; font-size: 0.95rem;">
+          {% if fno == 210 %}
+            黑色
+          {% elif fno == 410 %}
+            藍色
+          {% elif fno == 610 %}
+            白色
+          {% elif fno == 25 %}
+            托盤
+          {% else %}
+            空
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

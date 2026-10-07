@@ -22,7 +22,7 @@
         <th>產品名稱</th>
         <th>說明</th>
         <th>單價</th>
-        <th>庫存</th>
+        <th>總庫存 (可訂購)</th>
         <th>本次下單數量</th>
       </tr>
     </thead>
@@ -39,8 +39,15 @@
         </td>
         <td>{{ p.name }}</td>
         <td>{{ p.description or '-' }}</td>
-        <td>{{ p.base_price }}</td>
-        <td>{{ p.stock }}</td>
+        <td>${{ p.base_price }}</td>
+        <td>
+          <div style="font-weight: bold; font-size: 1.05rem; color: #27ae60;">
+            {{ p.stock }} 件
+          </div>
+          <div style="font-size: 0.8rem; color: #7f8c8d; margin-top: 2px;">
+            ASRS現貨: {{ p.asrs_stock }} | 待入庫: {{ p.unwarehoused_stock }}
+          </div>
+        </td>
         <td>
           <input
             type="number"

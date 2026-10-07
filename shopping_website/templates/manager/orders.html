@@ -29,17 +29,44 @@
   .search-box { display: flex; gap: 1rem; margin-bottom: 1.5rem; background: #fff; padding: 1rem; border-radius: 12px; border: 1px solid #eee; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
   .search-box input, .search-box select { padding: 0.6rem 1rem; border: 1px solid #ddd; border-radius: 6px; flex: 1; outline:none; font-size:1rem; }
   .search-box button { padding: 0.6rem 1.5rem; background: #0d6efd; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+
+  /* Source Filter Pills */
+  .src-pill { padding: 0.45rem 1rem; font-size: 0.9rem; border-radius: 20px; text-decoration: none; display: inline-block; font-weight: bold; transition: all 0.2s; }
+  .src-pill-all { background: #ecf0f1; color: #333; }
+  .src-pill-all.active { background: #2c3e50; color: #fff; }
+  .src-pill-line { background: #e8f8f5; color: #27ae60; border: 1px solid #a3e4d7; }
+  .src-pill-line.active { background: #27ae60; color: #fff; border-color: #27ae60; }
+  .src-pill-web { background: #ebf5fb; color: #2980b9; border: 1px solid #aed6f1; }
+  .src-pill-web.active { background: #2980b9; color: #fff; border-color: #2980b9; }
 </style>
 
 <div style="max-width: 1000px; margin: 0 auto; padding: 0 1rem;">
-  <div style="margin-bottom: 2rem;">
-    <h2 class="page-title" style="margin-bottom: 0.5rem;">📋 訂單總覽</h2>
-    <p class="text-muted">管理者可在此查看所有訂單、處理進度及進行異常排除。</p>
+  <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <h2 class="page-title" style="margin-bottom: 0.5rem;">📋 訂單總覽 (整合 網站 與 LineTalker 訂單)</h2>
+      <p class="text-muted">即時同步工廠所有訂單，支援 💻 網站下單 與 📱 LineTalker 智慧客服訂單的統一監控與排產。</p>
+    </div>
+    <div style="display: flex; gap: 0.5rem;">
+      <a href="?tab={{ tab }}&source=" class="src-pill src-pill-all {% if not source %}active{% endif %}">
+        全部來源
+      </a>
+      <a href="?tab={{ tab }}&source=line" class="src-pill src-pill-line {% if source == 'line' %}active{% endif %}">
+        📱 僅顯示 LINE 訂單
+      </a>
+      <a href="?tab={{ tab }}&source=web" class="src-pill src-pill-web {% if source == 'web' %}active{% endif %}">
+        💻 僅顯示 WEB 網站訂單
+      </a>
+    </div>
   </div>
 
   <form method="get" class="search-box">
     <input type="hidden" name="tab" value="{{ tab }}">
-    <input type="text" name="q" value="{{ q }}" placeholder="🔍 搜尋訂單ID / 客戶 / 產品 / 備註...">
+    <input type="text" name="q" value="{{ q }}" placeholder="🔍 搜尋訂單ID / 客戶姓名 / 電話 / 產品 / 備註...">
+    <select name="source" style="flex: 0.4;">
+      <option value="">全部來源 (WEB + LINE)</option>
+      <option value="line" {% if source == 'line' %}selected{% endif %}>📱 LINE (LineTalker)</option>
+      <option value="web" {% if source == 'web' %}selected{% endif %}>💻 網站下單 (WEB)</option>
+    </select>
     <select name="step" style="flex: 0.5;">
       <option value="">全部製程狀態</option>
       {% for s in steps %}
@@ -52,11 +79,11 @@
 
   <!-- Tabs -->
   <div class="order-tabs">
-    <a href="?tab=all&q={{ q }}&step={{ step }}" class="tab-btn {% if tab == 'all' %}active{% endif %}">全部</a>
-    <a href="?tab=pending_payment&q={{ q }}&step={{ step }}" class="tab-btn {% if tab == 'pending_payment' %}active{% endif %}">等待付款</a>
-    <a href="?tab=active&q={{ q }}&step={{ step }}" class="tab-btn {% if tab == 'active' %}active{% endif %}">處理中</a>
-    <a href="?tab=completed&q={{ q }}&step={{ step }}" class="tab-btn {% if tab == 'completed' %}active{% endif %}">已完成</a>
-    <a href="?tab=cancelled&q={{ q }}&step={{ step }}" class="tab-btn {% if tab == 'cancelled' %}active{% endif %}">已取消 / 拒絕</a>
+    <a href="?tab=all&source={{ source }}&q={{ q }}&step={{ step }}" class="tab-btn {% if tab == 'all' %}active{% endif %}">全部</a>
+    <a href="?tab=active&source={{ source }}&q={{ q }}&step={{ step }}" class="tab-btn {% if tab == 'active' %}active{% endif %}">處理中 / 生產中</a>
+    <a href="?tab=completed&source={{ source }}&q={{ q }}&step={{ step }}" class="tab-btn {% if tab == 'completed' %}active{% endif %}">已完成</a>
+    <a href="?tab=pending_payment&source={{ source }}&q={{ q }}&step={{ step }}" class="tab-btn {% if tab == 'pending_payment' %}active{% endif %}">等待付款</a>
+    <a href="?tab=cancelled&source={{ source }}&q={{ q }}&step={{ step }}" class="tab-btn {% if tab == 'cancelled' %}active{% endif %}">已取消 / 拒絕</a>
   </div>
 
   <div id="orders-container">
@@ -66,8 +93,16 @@
         <div class="card-header">
           <div>
             <span class="card-title mono">#{{ o["order_id"] }}</span>
-            <span class="card-date" style="margin-left: 1.5rem;"><i class="far fa-user"></i> 👤 {{ o["customer_name"] }}</span>
-            <span class="card-date" style="margin-left: 1rem;"><i class="far fa-clock"></i> 🕒 {{ o["date"] }}</span>
+            {% if o["source"] == 'line' %}
+              <span class="badge" style="background:#27ae60; color:#fff; margin-left: 0.5rem; font-weight: bold; padding: 4px 8px; border-radius: 4px;">📱 LINE</span>
+            {% else %}
+              <span class="badge" style="background:#2980b9; color:#fff; margin-left: 0.5rem; font-weight: bold; padding: 4px 8px; border-radius: 4px;">💻 WEB</span>
+            {% endif %}
+            <span class="card-date" style="margin-left: 1.2rem;"><i class="far fa-user"></i> 👤 <strong>{{ o["contact_name"] or o["customer_name"] }}</strong></span>
+            {% if o["contact_phone"] %}
+              <span class="card-date" style="margin-left: 0.8rem;">📞 {{ o["contact_phone"] }}</span>
+            {% endif %}
+            <span class="card-date" style="margin-left: 0.8rem;"><i class="far fa-clock"></i> 🕒 {{ o["date"] }}</span>
           </div>
           <div>
             {% set st = o["status"] %}
@@ -85,6 +120,9 @@
             <div><span class="info-label">數量：</span> {{ o["amount"] }}</div>
             <div><span class="info-label">總價：</span> <span style="color:#d9534f; font-weight:bold;">${{ o["total_price"] }}</span></div>
             <div><span class="info-label">當前製程：</span> <span class="badge" style="background:#e9ecef; color:#333;">{{ o["step_name"] or '未開始' }}</span></div>
+            {% if o["address"] and o["address"] != "—" %}
+            <div><span class="info-label">送貨地址：</span> 📍 {{ o["address"] }}</div>
+            {% endif %}
             {% if o["note"] %}
             <div style="margin-top: 0.75rem; padding: 0.75rem; background: #fff3cd; border-radius: 6px; color: #856404; font-size: 0.9rem; border-left: 4px solid #ffeeba;">
               <strong>⚠️ 備註：</strong>{{ o["note"] }}
@@ -96,7 +134,7 @@
             <a href="{{ url_for('factory.simulate', order_id=o['order_id']) }}" class="btn btn-primary" style="width: 100%; text-decoration: none; text-align: center; box-shadow:0 2px 5px rgba(13,110,253,0.3);" target="_blank">🏭 工廠模擬視角</a>
             
             {% if st == "active" or st == "pending_payment" %}
-              <button onclick="openRejectModal('{{ o['order_id'] }}')" class="btn btn-outline-danger" style="width: 100%; margin-top: 0.5rem; background:none; border:1px solid #dc3545; color:#dc3545;">拒絕訂單</button>
+              <button data-order-id="{{ o['order_id'] }}" onclick="openRejectModal(this.dataset.orderId)" class="btn btn-outline-danger" style="width: 100%; margin-top: 0.5rem; background:none; border:1px solid #dc3545; color:#dc3545;">拒絕訂單</button>
             {% endif %}
           </div>
         </div>
