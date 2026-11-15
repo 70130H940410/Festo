@@ -90,6 +90,25 @@ python3 -m venv .venv
 
 ## 與工廠協作
 
+### AI 修改工具：Impeccable ＋ Ponytail
+
+本專案搭配以下兩個技能；它們是開發時給 AI 的工作指引，不是網站的執行套件，不需加入 Flask 或部署依賴。
+
+| 技能 | 在本專案的用途 | 官方來源／安裝說明 |
+| --- | --- | --- |
+| Impeccable | 介面層級、FESTO 風格一致性、響應式、鍵盤操作、可讀性及動畫呈現 | [pbakaus/impeccable](https://github.com/pbakaus/impeccable) |
+| Ponytail | 先理解資料流，再以最小完整修改解決問題，優先重用既有程式與原生能力 | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) · [安裝指南](https://github.com/DietrichGebert/ponytail/blob/main/INSTALL.md) |
+
+目前維護者的 Codex 工作區已可使用兩者；技能位於工作區設定中，**下載本儲存庫不會自動安裝到協作者的 AI 工具**。新協作者請依官方說明，選擇自己使用的 Codex、Claude Code 或 Cursor 安裝方式，並確認工具已辨識技能。保留技能所需的參考文件與腳本，不只複製名稱或單一提示詞，也不要用上游範本覆蓋本專案的 `AGENTS.md`。
+
+建議任務描述：
+
+> 請依本專案 AGENTS.md 與 CONTRIBUTING.md 修改。介面工作使用 Impeccable，程式修改使用 Ponytail；先檢查既有功能和資料流，以最小完整改動完成，保留本機資料與工廠同步界線，最後檢查受影響的呼叫端並回報驗證結果。
+
+純後端工作不必套用介面設計流程。提交前請檢查修改連帶影響到的檔案；若所安裝版本提供 `/ponytail-review` 可使用它，否則直接請 AI 依同樣原則進行 review。只載入 Ponytail 的 `SKILL.md`，不代表已安裝所有 review 指令或 hooks。程式行數與宣傳中的節省比例不是本專案驗收標準。
+
+完整修改原則見 [CONTRIBUTING.md](CONTRIBUTING.md)，AI 專用入口見 [AGENTS.md](AGENTS.md)。
+
 請先看 [協作原則](CONTRIBUTING.md)。離線初始化不是正式資料庫遷移工具，不要對既有資料庫執行 seed 或用測試資料覆蓋工廠資料。
 
 - [既有 MES 下行送單流程](docs/mes-downlink-update.md)
