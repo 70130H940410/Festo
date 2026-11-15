@@ -1,10 +1,12 @@
+import {resourceStations,machineLabels,updateMachineCycles,machineMotion} from './factory-floor-cloud.mjs';
 import {stations,demoFrameAt,demoDuration,dock,belts,spurs,parking,robotRoads,createSimulation,setRecords,tick,snapshotOf,magazineAt,pressAt} from './factory-floor-model.mjs';
 const canvas=document.getElementById('factory-floor');
 const ctx=canvas.getContext('2d');
 const play=document.getElementById('floor-play'), seek=document.getElementById('floor-time');
 const picker=document.getElementById('floor-station');
 let time=0, playing=false, previous=0, selected='A';
-let mode='live', snapshot=null, liveSimulation=createSimulation();
+let mode=document.getElementById('floor-mode').value, snapshot=null, liveSimulation=createSimulation();
+let cloudCycles=new Map();
 let magazineCycle=null,pressCycle=null,drillCycle=null,measureCycle=null;
 const reducedMotion=window.matchMedia('(prefers-reduced-motion: reduce)');
 seek.max=demoDuration;
@@ -15,22 +17,23 @@ function line(points,color,width,dash=[]){ctx.beginPath();ctx.moveTo(...points[0
 function circle(x,y,r,color){ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();}
 function belt(points){line(points,'#889ca8',48);line(points,'#e3eaf0',42);line(points,'#394b57',30);line(points,'#a7bac5',2,[3,10]);}
 function arm(x,y,active){const a=active?Math.sin(time*2)*.35:0;line([[x,y+20],[x-25,y-10],[x+15+Math.sin(a)*25,y-35]],'#627d8b',15);line([[x,y+20],[x-25,y-10],[x+15+Math.sin(a)*25,y-35]],'#e1eaf0',9);circle(x,y+20,12,'#0079bc');circle(x-25,y-10,8,'#0079bc');box(x+8+Math.sin(a)*25,y-40,18,8,'#233d4c');}
-function machine(s,active,progress=0){
+function machine(s,active,progress=0,cloudState=null){
   const {x,y,kind}=s; const w=kind==='rack'?160:130,h=kind==='rack'?140:112;
   box(x-w/2+5,y-h/2+7,w,h,'#b6c7d0');
   box(x-w/2,y-h/2,w,h,selected===s.id?'#d6edf8':'#f5f8fa',selected===s.id?'#006eaf':'#8ea4b1');
   box(x-w/2,y-h/2,w,9,'#007bb9');
-  circle(x+w/2-12,y-h/2+22,5,active?'#29ab68':'#9aaeb8');
+  circle(x+w/2-12,y-h/2+22,5,cloudState==='error'?'#b42332':cloudState==='stale'?'#b96710':active?'#29ab68':'#9aaeb8');
   if(kind==='rack'){
-    for(let r=0;r<4;r++)for(let c=0;c<8;c++)box(x-67+c*17,y-48+r*22,13,17,(r+c)%3?'#304c5e':'#8ec7e2');
-    line([[x,y-53],[x,y+42]],'#8c9faa',5);box(x-15,y-10+(active?Math.sin(time)*20:0),30,18,'#f0b83f');
-    text('A1 / A2 均可放入、取出',x,y+60,12);
-  }else if(kind==='robot'){arm(x,y,active||(mode==='demo'&&s.id==='P'));}
+    for(let r=0;r<4;r++)for(let c=0;c<8;c++)box(x-67+c*17,y-48+r*22,13,17,mode==='cloud'?'#9aaeb8':(r+c)%3?'#304c5e':'#8ec7e2');
+    line([[x,y-53],[x,y+42]],'#8c9faa',5);box(x-15,y-10+(active&&!reducedMotion.matches?Math.sin(time)*20:0),30,18,'#f0b83f');
+    text(mode==='cloud'?'倉儲狀態・無 A1/A2 定位':'A1 / A2 均可放入、取出',x,y+60,12);
+  }else if(kind==='robot'){arm(x,y,!reducedMotion.matches&&(active||(mode==='demo'&&s.id==='P')));}
   else if(kind==='magazine'){
     const motion=magazineAt(progress);
     for(let i=0;i<(active?3:4);i++)box(x-35,y-28+i*14+(active?motion.shift*14:0),70,10,'#8299a5','#4d6573');
     if(active&&motion.refill>0)box(x-35,y-48+motion.refill*20,70,10,'#58a7ce','#285b75');
     if(active)line([[x-20,y+32],[x-20,dock.F[1]-16]],'#9bb0bd',2);
+    if(cloudState&&active){const width=70-48*motion.drop;box(x-width/2,y+14+(dock.F[1]-5-y-14)*motion.drop*motion.drop,width,10,'#8299a5','#4d6573');}
   }
   else if(kind==='oven'){box(x-46,y-33,92,65,'#becbd2','#6d8593');box(x-30,y-19,60,38,active?'#edaf53':'#475d69');for(let i=0;i<5;i++)line([[x-22+i*11,y-10],[x-22+i*11,y+10]],'#ecce85',3);}
   else{
@@ -40,13 +43,13 @@ function machine(s,active,progress=0){
     else if(kind==='measure'){line([[x-30,y+offset],[x+30,y+offset]],'#007cb8',4);line([[x-30,y-10+offset],[x-30,y+12+offset]],'#007cb8',3);line([[x+30,y-10+offset],[x+30,y+12+offset]],'#007cb8',3);}
     else {box(x-10,y-22,20,28+offset,'#7e95a2');box(x-(kind==='press'?27:3),y+6+offset,kind==='press'?54:6,10,'#283f4d');}
   }
-  text(`${s.id==='P'?'新站':s.id}  ${s.name}`,kind==='magazine'?x-100:x,y+h/2+18,17);text(active?(kind==='press'&&progress>=.8?'壓製完成':kind==='drill'&&progress>=.8?'鑽孔完成':kind==='measure'&&progress>=.8?'量測完成':'加工中'):mode==='live'?'無加工紀錄':s.id==='P'?'示範站':'待機',x,kind==='magazine'?y+45:y-h/2+25,12,active?'#166c40':'#526875');
+  text(`${s.id==='P'?'新站':s.id}  ${s.name}`,kind==='magazine'?x-100:x,y+h/2+18,17);text(cloudState?machineLabels[cloudState]:active?(kind==='press'&&progress>=.8?'壓製完成':kind==='drill'&&progress>=.8?'鑽孔完成':kind==='measure'&&progress>=.8?'量測完成':'加工中'):mode==='live'?'無加工紀錄':s.id==='P'?'示範站':'待機',x,kind==='magazine'?y+45:y-h/2+25,12,active?'#166c40':'#526875');
 }
 function pallet(x,y,id,stage){box(x-16,y-12,32,24,'#f6f9fb','#627985');box(x-11,y-8,22,16,colors[stage]);text(id,x,y+4,10,'white');}
 function render(){
   ctx.clearRect(0,0,1200,780);box(0,0,1200,780,'#e5edf1');
   box(30,25,1140,710,'#edf3f5','#cedbe1');
-  text('FESTO CP FACTORY',60,60,18,'#45616f','left');text(mode==='live'?'訂單進度同步':'2D 流程示範',1140,60,14,'#45616f','right');
+  text('FESTO CP FACTORY',60,60,18,'#45616f','left');text(mode==='cloud'?'實際工廠同步':mode==='live'?'本機訂單進度':'2D 流程示範',1140,60,14,'#45616f','right');
   belts.forEach(belt);
   spurs.forEach(belt);
   line([[450,350],[690,350],[690,570],[450,570],[450,350]],'#869ba7',3,[8,8]);
@@ -57,13 +60,14 @@ function render(){
     const x=(a[0]+b[0])/2,y=(a[1]+b[1])/2,dx=(b[0]-a[0])/length,dy=(b[1]-a[1])/length;
     line([[x-dx*5-dy*4,y-dy*5+dx*4],[x+dx*5,y+dy*5],[x-dx*5+dy*4,y-dy*5-dx*4]],'#fff',2);
   }
-  text('R1 / R2 搬運區',555,425,21);text('共用路段互鎖・到站後交接',555,453,14,'#526875');
+  text('R1 / R2 搬運區',555,425,21);text(mode==='cloud'?'配置示意・尚無實機定位':'共用路段互鎖・到站後交接',555,453,14,'#526875');
   text('左：輸出到 R　右：由 R 送入',550,480,13,'#526875');
   text('E 輸出',710,330,12,'#233d4c','right');text('E 送入',830,330,12,'#233d4c','left');
   text('B 輸出到 R',865,525,12);text('B 送入輸送帶',865,613,12);
   parking.forEach((home,i)=>{box(home[0]-33,home[1]-33,66,66,'#e2ebef','#9fb3bf');text(`R${i+1} 休息位`,home[0],home[1]+50,12);});
   text('休息區：B 與新站之間',795,727,14);
-  const scene=mode==='live'?snapshotOf(liveSimulation):demoFrameAt(time),pieces=scene.pieces;
+  const scene=mode==='cloud'?{pieces:[],robots:[]}:mode==='live'?snapshotOf(liveSimulation):demoFrameAt(time),pieces=scene.pieces;
+  const cloudMotion=new Map(stations.map(s=>[s.id,machineMotion(cloudCycles.get(s.id))]));
   const magazinePiece=pieces.find(p=>p.position&&p.station==='F'&&p.phase==='processing'&&(mode==='demo'||p.state==='running'));
   if(!magazinePiece)magazineCycle=null;
   else if(magazineCycle?.id!==magazinePiece.id)magazineCycle={id:magazinePiece.id,start:time};
@@ -81,7 +85,7 @@ function render(){
   else if((mode==='demo'||measurePiece.state==='running')&&measureCycle?.id!==measurePiece.id)measureCycle={id:measurePiece.id,start:time};
   const measureProgress=reducedMotion.matches?1:mode==='demo'?(measurePiece?.progress||0):Math.min(1,(time-(measureCycle?.start??time))/4);
   text('A2 放入／取出',630,218,12);text('A1 放入／取出',610,310,12);
-  stations.forEach(s=>machine(s,pieces.some(p=>p.position&&p.phase==='processing'&&(mode==='demo'||p.state==='running')&&(p.station===s.id||(s.id==='A'&&p.station?.startsWith('A')))),s.id==='F'?magazineProgress:s.id==='G'?pressProgress:s.id==='C'?drillProgress:s.id==='B'?measureProgress:0));
+  stations.forEach(s=>mode==='cloud'?machine(s,cloudMotion.get(s.id).active,reducedMotion.matches?1:cloudMotion.get(s.id).progress,cloudMotion.get(s.id).state):machine(s,pieces.some(p=>p.position&&p.phase==='processing'&&(mode==='demo'||p.state==='running')&&(p.station===s.id||(s.id==='A'&&p.station?.startsWith('A')))),s.id==='F'?magazineProgress:s.id==='G'?pressProgress:s.id==='C'?drillProgress:s.id==='B'?measureProgress:0));
   const robotLabels={idle:'休息',pickup:'前往接貨',loading:'靠站裝載',loaded:'載貨搬運',unloading:'靠站卸貨',return:'返回休息位'};
   for(const robot of scene.robots){
     const [rx,ry]=robot.position;
@@ -101,10 +105,11 @@ function render(){
     if(drop===1)text(String(magazinePiece.id),s.x,dock.F[1]+4,10,'white');
   }
   const queued=pieces.filter(p=>p.phase==='queued').length,stored=pieces.filter(p=>p.done).length;
-  text(`待上線 ${queued} 件 · 已完成 ${mode==='live'?snapshot?.pieces.filter(p=>p.state==='finished').length||0:stored} 件`,235,535,14);
+  if(mode!=='cloud')text(`待上線 ${queued} 件 · 已完成 ${mode==='live'?snapshot?.pieces.filter(p=>p.state==='finished').length||0:stored} 件`,235,535,14);
+  if(mode==='cloud'){text('工件位置：原傳輸尚未提供',550,510,13);text('R1 / R2 位置與載貨：未知',550,535,13);}
   if(mode==='live')text('搬運位置與避碰為示意，非實機定位',550,510,12);
-  document.getElementById('floor-count').textContent=mode==='live'?`完成 ${snapshot?.pieces.filter(p=>p.state==='finished').length||0} / ${snapshot?.amount??'—'} 件${(snapshot?.amount||0)>60?'（地圖最多顯示 60 件，明細完整）':''}`:`完成 ${pieces.filter(p=>p?.done).length} / 4 件`;
-  document.getElementById('floor-clock').textContent=mode==='live'?'每 3 秒同步':`${Math.floor(time)} / ${demoDuration} 秒`;if(mode==='demo')seek.value=time;
+  document.getElementById('floor-count').textContent=mode==='cloud'?'實廠模式不推算工件數量':mode==='live'?`完成 ${snapshot?.pieces.filter(p=>p.state==='finished').length||0} / ${snapshot?.amount??'—'} 件${(snapshot?.amount||0)>60?'（地圖最多顯示 60 件，明細完整）':''}`:`完成 ${pieces.filter(p=>p?.done).length} / 4 件`;
+  document.getElementById('floor-clock').textContent=mode==='cloud'?'每 3 秒嘗試更新':mode==='live'?'每 3 秒同步':`${Math.floor(time)} / ${demoDuration} 秒`;if(mode==='demo')seek.value=time;
 
 }
 function select(id){selected=id;picker.value=id;const s=stations.find(s=>s.id===id);document.getElementById('floor-detail').textContent=`${s.id==='P'?'新站':s.id} ${s.name}｜${s.job}`;render();}
@@ -118,6 +123,7 @@ seek.addEventListener('input',()=>{time=Number(seek.value);setPlaying(false);ren
 document.addEventListener('visibilitychange',()=>{previous=0;});
 function frame(now){
   const dt=previous?Math.min((now-previous)/1000,.1):0;
+  if(mode==='cloud'&&!document.hidden){time=now/1000;if(!reducedMotion.matches||Math.floor(now/1000)!==Math.floor(previous/1000))render();}
   if(mode==='live'&&!document.hidden){time=now/1000;tick(liveSimulation,dt);if(!reducedMotion.matches||Math.floor(now/1000)!==Math.floor(previous/1000))render();}
   if(mode==='demo'&&playing&&!document.hidden){time=Math.min(demoDuration,time+dt*Number(document.getElementById('floor-speed').value));if(time>=demoDuration||reducedMotion.matches)setPlaying(false);render();}
   previous=now;requestAnimationFrame(frame);
@@ -128,14 +134,39 @@ const orderPicker=document.getElementById('floor-order'),modePicker=document.get
 const stateLabels={running:'加工中',error:'故障停留',waiting:'等待下一步',pending:'尚未開始',finished:'製程完成',unknown:'未初始化／未知'};
 let controller=null,generation=0;
 function updateControls(){
-  document.querySelector('.floor-heading p').textContent=mode==='live'?'依選定訂單的逐件製程紀錄顯示位置；換站時以動畫銜接。':'雙 R 搬運 · 工件沿單向輸送帶排隊，進出料分道交接。';
-  [play,seek,document.getElementById('floor-reset'),document.getElementById('floor-speed'),document.querySelector('label[for="floor-speed"]'),document.querySelector('label[for="floor-time"]')].forEach(e=>e.hidden=mode==='live');
-  [play,seek,document.getElementById('floor-reset'),document.getElementById('floor-speed')].forEach(e=>e.disabled=mode==='live');
-  orderPicker.disabled=mode==='demo';document.getElementById('floor-piece-details').hidden=mode==='demo';
-  document.getElementById('floor-source').textContent=mode==='live'?'本機訂單紀錄，非 PLC 定位':'示範動畫，非訂單進度';
-  document.querySelector('.floor-legend').firstElementChild.textContent=mode==='live'?'藍：待開始／橙：加工或等待／綠：製程完成':'藍色工件：未加工';
-  document.querySelector('.floor-legend').children[1].textContent=mode==='live'?'紅：故障／紫：未知；不代表分類器判定':'橙色工件：半成品';
-  document.querySelector('.floor-legend').children[2].textContent=mode==='live'?'R1／R2 分別回休息位；搬運與等待時間為示意':'綠色工件：成品';
+  const cloud=mode==='cloud',demo=mode==='demo';
+  const overview=orderPicker.querySelector('option[value=""]');
+  if(overview){overview.hidden=!cloud;overview.disabled=!cloud;}
+  if(mode==='live'&&!orderPicker.value&&orderPicker.options.length>1)orderPicker.selectedIndex=1;
+  document.querySelector('.floor-heading p').textContent=cloud?'沿用原有工廠傳輸：依 MES 機台狀態顯示動作，工單顯示實際製程紀錄。':demo?'雙 R 搬運 · 工件沿單向輸送帶排隊，進出料分道交接。':'依本機訂單的逐件製程紀錄顯示位置；換站時以動畫銜接。';
+  [play,seek,document.getElementById('floor-reset'),document.getElementById('floor-speed'),document.querySelector('label[for="floor-speed"]'),document.querySelector('label[for="floor-time"]')].forEach(e=>e.hidden=!demo);
+  [play,seek,document.getElementById('floor-reset'),document.getElementById('floor-speed')].forEach(e=>e.disabled=!demo);
+  orderPicker.disabled=demo;document.getElementById('floor-piece-details').hidden=mode!=='live';
+  document.getElementById('floor-cloud-details').hidden=!cloud;
+  document.getElementById('floor-source').textContent=cloud?'Supabase · 原有工廠傳輸':demo?'示範動畫，非訂單進度':'本機訂單紀錄，非 PLC 定位';
+  const labels=cloud?['綠：MES 加工中／紅：故障','橙：舊紀錄／灰：閒置或未知','全廠狀態不代表所選訂單正在該站加工']:demo?['藍色工件：未加工','橙色工件：半成品','綠色工件：成品']:['藍：待開始／橙：加工或等待／綠：製程完成','紅：故障／紫：未知；不代表分類器判定','R1／R2 分別回休息位；搬運與等待時間為示意'];
+  labels.forEach((label,i)=>document.querySelector('.floor-legend').children[i].textContent=label);
+}
+function fillRows(id,rows){
+  const body=document.getElementById(id);body.replaceChildren();
+  for(const values of rows){const row=document.createElement('tr');for(const value of values){const cell=document.createElement('td');cell.textContent=value??'—';row.append(cell);}body.append(row);}
+}
+function recordTime(value){
+  if(!value)return '未記錄';
+  const date=new Date(value);
+  return Number.isNaN(date.getTime())?value:date.toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false})+'（台灣）';
+}
+function acceptCloud(data){
+  if(data.order_id&&data.website_status&&orderPicker.value===data.order_id){
+    orderPicker.selectedOptions[0].textContent=`${data.order_id} · 本機 ${data.website_status}`;
+  }
+  cloudCycles=updateMachineCycles(cloudCycles,data.machines);
+  fillRows('floor-machine-list',data.machines.map(row=>[resourceStations[row.ResourceID]||`Resource ${row.ResourceID}`,row.ResourceName,machineLabels[machineMotion({row}).state],recordTime(row.recorded_at)]));
+  fillRows('floor-mes-step-list',data.steps.map(row=>[row.step_no,resourceStations[row.resource_id]||`Resource ${row.resource_id}`,row.description,recordTime(row.start),recordTime(row.end)]));
+  document.getElementById('floor-mes-order').textContent=`${data.order_id?`訂單 ${data.order_id} → MES ${data.mes_ono??'未對應'}。`:''}${data.order_message} ${data.order?`MES 狀態代碼 ${data.order.state}；開始 ${recordTime(data.order.start)}；結束 ${recordTime(data.order.end)}。`:''}已完工步驟不代表工件目前位置。`;
+  const recent=data.machines.some(row=>['busy','idle','error'].includes(machineMotion({row}).state));
+  syncText.textContent=`${data.connection==='connected'?'雲端讀取成功':'雲端部分資料讀取失敗'}｜${recent?'依各站紀錄時間判斷；超過 5 分鐘即停止動畫':'目前沒有可確認的新機台紀錄，動畫已停止'}｜最近機台紀錄 ${recordTime(data.latest_record_at)}｜查詢時間 ${recordTime(data.queried_at)}。原傳輸未提供心跳，連線成功不等於工廠在線。${data.steps_error||''}`;
+  render();
 }
 function acceptSnapshot(data){
   setRecords(liveSimulation,data.pieces.slice(0,60));
@@ -146,26 +177,27 @@ function acceptSnapshot(data){
   render();
 }
 async function sync(){
-  if(mode!=='live'||!orderPicker.value||controller)return;
+  if(mode==='demo'||(mode==='live'&&!orderPicker.value)||controller)return;
   const current=++generation,requestController=new AbortController();controller=requestController;
-  const timeout=setTimeout(()=>requestController.abort(),8000);
+  const timeout=setTimeout(()=>requestController.abort(),20000);
   try{
-    const response=await fetch(`/factory/api/floor_status/${encodeURIComponent(orderPicker.value)}`,{signal:requestController.signal,cache:'no-store'});
+    const url=mode==='cloud'?`/factory/api/floor_cloud_status?order_id=${encodeURIComponent(orderPicker.value)}`:`/factory/api/floor_status/${encodeURIComponent(orderPicker.value)}`;
+    const response=await fetch(url,{signal:requestController.signal,cache:'no-store'});
     if(!response.ok)throw new Error('讀取失敗');
     const data=await response.json();
-    if(current===generation&&mode==='live')acceptSnapshot(data);
-  }catch(e){if(current===generation&&mode==='live'){snapshot=null;liveSimulation=createSimulation();magazineCycle=null;pressCycle=null;drillCycle=null;measureCycle=null;document.getElementById('floor-piece-list').replaceChildren();syncText.textContent='連線失敗或無權限：位置未知，已停止顯示舊工件。將自動重試。';render();}}
+    if(current===generation){if(mode==='cloud')acceptCloud(data);else if(mode==='live')acceptSnapshot(data);}
+  }catch(e){if(current===generation&&mode!=='demo'){cloudCycles.clear();fillRows('floor-machine-list',[]);fillRows('floor-mes-step-list',[]);document.getElementById('floor-mes-order').textContent='讀取失敗，無法確認 MES 工單。';snapshot=null;liveSimulation=createSimulation();magazineCycle=null;pressCycle=null;drillCycle=null;measureCycle=null;document.getElementById('floor-piece-list').replaceChildren();syncText.textContent='連線失敗或無權限：位置未知，已停止顯示舊工件。將自動重試。';render();}}
   finally{clearTimeout(timeout);if(controller===requestController)controller=null;}
 }
-function changeSource(){generation++;controller?.abort();controller=null;snapshot=null;liveSimulation=createSimulation();magazineCycle=null;pressCycle=null;drillCycle=null;measureCycle=null;document.getElementById('floor-piece-list').replaceChildren();setPlaying(false);time=0;updateControls();render();if(mode==='live'){syncText.textContent=orderPicker.value?'正在讀取訂單…':'沒有可讀取的訂單';sync();}else syncText.textContent='4 件示範工件，兩台 R 輪流搬運、回位休息；左側輸出到 R，右側由 R 送入。共用路段互鎖，前方有工件就等待。';}
+function changeSource(){cloudCycles.clear();fillRows('floor-machine-list',[]);fillRows('floor-mes-step-list',[]);document.getElementById('floor-mes-order').textContent='正在讀取 MES 紀錄…';generation++;controller?.abort();controller=null;snapshot=null;liveSimulation=createSimulation();magazineCycle=null;pressCycle=null;drillCycle=null;measureCycle=null;document.getElementById('floor-piece-list').replaceChildren();setPlaying(false);time=0;updateControls();render();if(mode!=='demo'){syncText.textContent=mode==='cloud'?'正在讀取實際工廠…':orderPicker.value?'正在讀取訂單…':'沒有可讀取的訂單';sync();}else syncText.textContent='4 件示範工件，兩台 R 輪流搬運、回位休息；左側輸出到 R，右側由 R 送入。共用路段互鎖，前方有工件就等待。';}
 orderPicker.addEventListener('change',changeSource);
 modePicker.addEventListener('change',()=>{mode=modePicker.value;changeSource();});
 async function loadOrders(){
   try{
     const response=await fetch('/factory/api/floor_orders',{cache:'no-store'});if(!response.ok)throw new Error();const data=await response.json();
-    orderPicker.replaceChildren();for(const order of data.orders){const option=document.createElement('option');option.value=order.order_id;option.textContent=`${order.order_id} · ${order.status}`;orderPicker.append(option);}
+    orderPicker.replaceChildren(new Option('全廠機台（不篩選訂單）',''));for(const order of data.orders){const option=document.createElement('option');option.value=order.order_id;option.textContent=`${order.order_id} · 本機 ${order.status}`;orderPicker.append(option);}
     if(data.orders.some(o=>o.order_id===orderPicker.dataset.order))orderPicker.value=orderPicker.dataset.order;
     changeSource();
-  }catch(e){orderPicker.replaceChildren(new Option('無法讀取訂單',''));syncText.textContent='無法讀取訂單，請確認已登入並重新整理。';}
+  }catch(e){orderPicker.replaceChildren(new Option('無法讀取訂單',''));if(mode==='cloud')changeSource();else syncText.textContent='無法讀取訂單，請確認已登入並重新整理。';}
 }
 updateControls();loadOrders();setInterval(sync,3000);

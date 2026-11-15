@@ -27,7 +27,7 @@ def cloud_snapshot(client):
         resources = client.table("tbl_resource").select("resource_id,resource_name").order("resource_id").execute().data
         for resource in resources or []:
             rows = (client.table("tbl_machine_report")
-                    .select("timestamp,automatic_mode,manual_mode,busy,error_l0")
+                    .select("timestamp,automatic_mode,manual_mode,busy,error_l0,error_l1,error_l2")
                     .eq("resource_id", resource["resource_id"])
                     .order("timestamp", desc=True).order("id", desc=True).limit(1).execute().data)
             row = rows[0] if rows else {}
@@ -36,6 +36,7 @@ def cloud_snapshot(client):
                 "ResourceID": resource["resource_id"], "ResourceName": resource["resource_name"],
                 "AutomaticMode": row.get("automatic_mode"), "ManualMode": row.get("manual_mode"),
                 "Busy": row.get("busy"), "ErrorL0": row.get("error_l0"),
+                "ErrorL1": row.get("error_l1"), "ErrorL2": row.get("error_l2"),
                 "recorded_at": stamp, "freshness": record_freshness(stamp, now)})
         latest = (client.table("tbl_machine_report").select("timestamp")
                   .order("timestamp", desc=True).limit(1).execute().data)

@@ -15,5 +15,5 @@
 
 .floor-controls [hidden] { display:none !important; }
 .floor-controls select { max-width:100%; }
-#floor-piece-details { padding:16px 24px; border-top:1px solid #d7dfe5; }
-#floor-piece-details summary { cursor:pointer; font-weight:600; }
+#floor-piece-details, #floor-cloud-details { padding:16px 24px; border-top:1px solid #d7dfe5; }
+#floor-piece-details summary, #floor-cloud-details summary { cursor:pointer; font-weight:600; }

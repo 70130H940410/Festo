@@ -17,6 +17,8 @@ Thumbs.db
 
 # Database backups
 *.db-journal
+shopping_website/database/mes_dispatch_receipts.db*
+shopping_website/mes_dispatch_receipts.db*
 
 # Local connection credentials
 .env

@@ -293,7 +293,7 @@ def submit_order_api():
       3. 扣除原物料庫存（原子操作，失敗就 rollback）
       4. 計算總價與預估交期（依製程秒數推算）
       5. 寫入 order_management.db 的 order_list（狀態：pending_payment）
-      6. 嘗試同步寫入 FestoMES.accdb（失敗不影響主流程）
+      6. 同步雲端待付款訂單；管理者確認製程後由原 sync_agent 下發 MES
       7. 清空 session 購物車
 
     回傳 JSON：{ success: bool, message: str, redirect_url: str }
@@ -480,7 +480,7 @@ def submit_order_api():
                     "company": company,
                     "address": address,
                     "total_price": total_price,
-                    "status": "Confirmed",  # 待工廠 sync_agent 轉為 In Production (MES ONo)
+                    "status": "Pending Payment",  # 管理者確認 MES 製程後才可下發
                     "created_at": datetime.now().isoformat(),
                 }
                 resp = sb.table("line_orders").insert(sb_order).execute()
@@ -488,37 +488,9 @@ def submit_order_api():
                     sb_id = resp.data[0].get("id")
                     cur_order.execute("UPDATE order_list SET supabase_order_id = ? WHERE order_id = ?", (sb_id, custom_order_id))
                     conn_order.commit()
-                    print(f"✅ [Supabase] 網站訂單已寫入雲端 (ID: {sb_id})")
+                    print(f"[Supabase] 網站訂單已寫入雲端 (ID: {sb_id})")
         except Exception as sb_e:
-            print(f"⚠️ [Supabase] 網站訂單同步雲端失敗: {sb_e}")
-
-        # ------
-        # 步驟 6：若有直接 Access 連線，嘗試寫入 FestoMES.accdb
-        # ------
-        try:
-            from core.db import get_festo_db
-            conn_festo  = get_festo_db()
-            cur_festo   = conn_festo.cursor()
-
-            cur_festo.execute("SELECT MAX(ONo) FROM tblOrder")
-            max_row   = cur_festo.fetchone()
-            max_ono   = max_row[0] if max_row and max_row[0] is not None else 0
-            new_ono   = max_ono + 1
-
-            cur_festo.execute(
-                """
-                INSERT INTO tblOrder (ONo, PlanedStart, PlanedEnd, Start, End, CNo, State, Enabled, Release)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (new_ono, datetime.now(), estimated_delivery_dt, None, None, 1, 1, True, datetime.now()),
-            )
-            conn_festo.commit()
-            conn_festo.close()
-            cur_order.execute("UPDATE order_list SET mes_ono = ? WHERE order_id = ?", (new_ono, custom_order_id))
-            conn_order.commit()
-        except Exception as e:
-            # Festo MES 連線失敗由 sync_agent.py 接續同步
-            pass
+            print(f"[Supabase] 網站訂單同步雲端失敗: {sb_e}")
 
         # 清空購物車 session
         session.pop("current_order_items", None)
@@ -575,7 +547,16 @@ def pay_order_api(order_id):
         if cur.rowcount == 0:
             return jsonify({"success": False, "message": "訂單無法付款或不存在"}), 400
         conn.commit()
-        return jsonify({"success": True, "message": "付款成功，訂單已送入工廠排程！"})
+        # Payment confirmation is not a production command. Keep the existing cloud order awaiting a plan.
+        try:
+            from .db import get_supabase_client
+            cloud = get_supabase_client()
+            link = cur.execute('SELECT supabase_order_id FROM order_list WHERE order_id=?', (order_id,)).fetchone()
+            if cloud and link and link[0]:
+                cloud.table('line_orders').update({'status': 'MES Awaiting Plan'}).eq('id', link[0]).eq('status', 'Pending Payment').execute()
+        except Exception:
+            pass  # The local payment remains confirmed; dispatch retries use the same cloud order.
+        return jsonify({"success": True, "message": "付款確認完成，待管理者確認 MES 製程後送單。"})
     except Exception as e:
         conn.rollback()
         return jsonify({"success": False, "message": str(e)}), 500
@@ -594,6 +575,8 @@ def order_history():
     使用者查看自己的訂單紀錄。
     依照 session["account"] 篩選，只顯示自己的訂單，按時間倒序排列。
     """
+    from .order_sync import sync_line_orders_to_order_list
+    sync_line_orders_to_order_list()
     customer_name = session.get("account", "Guest")
 
     conn = get_order_mgmt_db()

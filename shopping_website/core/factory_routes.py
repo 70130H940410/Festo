@@ -540,6 +540,12 @@ def _tick_once_for_order(
     
     回傳：本次派工的工作列表。
     """
+    columns = {r[1] for r in order_db.execute('PRAGMA table_info(order_list)')}
+    if 'mes_request' in columns:
+        physical = order_db.execute('SELECT mes_request FROM order_list WHERE order_id=?', (focus_order_id,)).fetchone()
+        if physical and physical['mes_request']:
+            return []  # A confirmed physical order is advanced only by MES, never by the simulation clock.
+
     # 步驟 1：完成到點的工作
     completed_count = _complete_due_jobs(order_db)
 
@@ -565,29 +571,7 @@ def _tick_once_for_order(
                 )
                 order_db.commit()
 
-                # 同步回寫雲端 Supabase (tbl_order 與 line_orders)
-                try:
-                    from core.db import get_supabase_client
-                    from datetime import datetime
-                    sb = get_supabase_client()
-                    if sb:
-                        now_iso = datetime.now().isoformat()
-                        mes_ono = o["mes_ono"]
-                        sb_order_id = o["supabase_order_id"]
-                        if mes_ono:
-                            sb.table("tbl_order").update({
-                                "state": 3,
-                                "end": now_iso,
-                            }).eq("ono", mes_ono).execute()
-                            print(f"🏁 [MES Complete] 工單 ONo: {mes_ono} (訂單: {focus_order_id}) 已在 MES 標記為完工！")
-
-                        if sb_order_id:
-                            sb.table("line_orders").update({
-                                "status": "Completed"
-                            }).eq("id", sb_order_id).execute()
-                            print(f"🎉 [LINE Order Complete] Supabase 訂單 #{sb_order_id} 狀態已同步為 Completed！")
-                except Exception as e:
-                    print(f"⚠️ [Order Complete Sync Warning] {e}")
+                # Simulation completion is not evidence of a physical MES completion.
 
     # 步驟 4：SSE 廣播（有變動才廣播）
     if completed_count > 0 or len(dispatched) > 0:
@@ -622,6 +606,8 @@ def simulate():
     if not order_id:
         abort(400, "need ?order_id=...")
 
+    from .order_sync import sync_line_orders_to_order_list
+    sync_line_orders_to_order_list(order_id)
     order_db   = _conn(_db_path(_ORDER_DB_FILENAME))
     product_db = _conn(_db_path(_PRODUCT_DB_FILENAME))
     try:
@@ -690,6 +676,9 @@ def simulate():
             done_qty  = agg.get(step_no, {}).get("done", 0)
             running_qty = agg.get(step_no, {}).get("running", 0)
 
+            if (o["status"] or "").lower() == _COMPLETE_STATUS:
+                done_qty = amount
+
             s["done_qty"]  = done_qty
             s["total_qty"] = amount
 
@@ -730,6 +719,8 @@ def api_order_status(order_id: str):
     
     狀態優先序：finished > error > running > pending
     """
+    from .order_sync import sync_line_orders_to_order_list
+    sync_line_orders_to_order_list(order_id)
     order_db   = _conn(_db_path(_ORDER_DB_FILENAME))
     product_db = _conn(_db_path(_PRODUCT_DB_FILENAME))
     try:
@@ -783,6 +774,9 @@ def api_order_status(order_id: str):
             done_qty   = agg.get(step_no, {}).get("done", 0)
             running_qty = agg.get(step_no, {}).get("running", 0)
             error_qty  = agg.get(step_no, {}).get("error", 0)
+
+            if (o["status"] or "").lower() == _COMPLETE_STATUS:
+                done_qty = amount
 
             s["done_qty"]  = done_qty
             s["total_qty"] = amount
@@ -1182,6 +1176,37 @@ def api_buffer_status():
         return response
     except Exception:
         return jsonify({"error": "倉位資料讀取失敗，不能判定為空位。"}), 503
+
+
+@factory_bp.route("/api/floor_cloud_status")
+@login_required
+def floor_cloud_status():
+    # Same access policy as the existing whole-factory MES dashboard.
+    if session.get('role') != 'admin':
+        abort(403)
+    from .db import get_supabase_client
+    from .floor_cloud import floor_cloud_snapshot
+    order_id = request.args.get('order_id') or None
+    mes_ono = None
+    website_status = None
+    if order_id:
+        db = _conn(_db_path(_ORDER_DB_FILENAME))
+        try:
+            order = db.execute('SELECT mes_ono,status FROM order_list WHERE order_id=?', (order_id,)).fetchone()
+            if order is None:
+                abort(404)
+            mes_ono = order['mes_ono']
+            website_status = order['status']
+        finally:
+            db.close()
+    client = get_supabase_client()
+    if client is None:
+        return jsonify(error='尚未設定 Supabase 連線'), 503
+    data = floor_cloud_snapshot(client, order_id, mes_ono)
+    data['website_status'] = website_status
+    response = jsonify(data)
+    response.headers['Cache-Control'] = 'no-store'
+    return response, (503 if data['machines_error'] else 200)
 
 
 @factory_bp.route("/api/floor_orders")

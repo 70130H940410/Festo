@@ -4,21 +4,21 @@
 {% block content %}
 {% include "factory/_floor.html" %}
 <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-  <h2 class="page-title">🏭 智慧工廠實時監控</h2>
+  <h2 class="page-title">本機模擬與訂單管理</h2>
   <span id="last-update" class="text-muted">載入中...</span>
 </div>
 
 <div style="display:flex; gap:1.5rem; margin-top:1rem; flex-wrap:wrap;">
   <!-- 機台狀態 -->
   <div class="responsive-panel" style="flex:2; min-width:300px;">
-    <h3>即時機台狀態</h3>
+    <h3>本機模擬機台狀態</h3>
     <div id="station-container" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:1rem;">
     </div>
   </div>
 
   <!-- 物料庫存 -->
   <div class="responsive-panel" style="flex:1; min-width:280px;">
-    <h3>即時物料庫存</h3>
+    <h3>本機物料庫存</h3>
     <div id="material-container" style="background:#fff; padding:1.5rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
     </div>
     <div style="margin-top:1rem; text-align:right;">
@@ -72,7 +72,7 @@ async function fetchStatus() {
         const res = await fetch("/admin/api/status");
         const data = await res.json();
 
-        document.getElementById("last-update").textContent = "即時監控連線中 | 最後更新: " + data.now;
+        document.getElementById("last-update").textContent = "本機資料 | 查詢時間: " + data.now;
 
         // 渲染機台
         const stationDiv = document.getElementById("station-container");

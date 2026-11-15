@@ -13,7 +13,8 @@
 #   POST     /manager/orders/<order_id>/delete → 拒絕訂單（保留紀錄）
 # =============================================================
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, abort
+import secrets
 from datetime import datetime
 from . import manager_required
 from .db import get_product_db, get_order_mgmt_db
@@ -368,8 +369,12 @@ def manager_order_detail(order_id):
     """
     顯示單筆訂單的詳細資訊頁面。
     """
+    from .order_sync import sync_line_orders_to_order_list
+    sync_line_orders_to_order_list(order_id)
     conn = get_order_mgmt_db()
     ensure_order_list_schema(conn)
+    from .order_dispatch import ensure_dispatch_schema, dispatch_view
+    ensure_dispatch_schema(conn)
     cur  = conn.cursor()
 
     cur.execute(
@@ -378,7 +383,8 @@ def manager_order_detail(order_id):
             rowid AS id,
             order_id, date, customer_name, product, amount, total_price,
             step_name, note, status, rejected_at, cancelled_at,
-            contact_name, contact_phone, company, address, source, mes_ono
+            contact_name, contact_phone, company, address, source, mes_ono,
+            supabase_order_id, mes_request, mes_dispatch_state, mes_dispatch_error
         FROM order_list
         WHERE order_id = ?
         """,
@@ -387,7 +393,26 @@ def manager_order_detail(order_id):
     order = cur.fetchone()
     conn.close()
 
-    return render_template("manager/order_detail.html", order=order)
+    token = session.setdefault('mes_csrf', secrets.token_urlsafe(32))
+    return render_template("manager/order_detail.html", order=order,
+                           mes=dispatch_view(order) if order else None, mes_csrf=token)
+
+
+@manager_bp.route('/orders/<order_id>/send-to-mes', methods=['POST'])
+@manager_required
+def manager_send_to_mes(order_id):
+    if not session.get('mes_csrf') or not secrets.compare_digest(session['mes_csrf'], request.form.get('csrf_token', '')):
+        abort(403)
+    from .order_dispatch import queue_order, publish_queued_orders
+    try:
+        if request.form.get('action') == 'retry':
+            publish_queued_orders(order_id)
+        else:
+            queue_order(order_id, request.form.getlist('wp_no'))
+        flash('送單請求已保存；請查看下方雲端狀態與 MES 接收工單。', 'success')
+    except ValueError as error:
+        flash(str(error), 'warning')
+    return redirect(url_for('manager.manager_order_detail', order_id=order_id))
 
 
 # =============================================================

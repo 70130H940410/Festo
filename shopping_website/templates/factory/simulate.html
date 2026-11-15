@@ -212,6 +212,8 @@
 
     // 初始化先抓取一次最新資料
     updateDOM();
+    // MES uploads do not emit the local simulation SSE event.
+    setInterval(() => updateDOM().catch(() => {}), 5000);
   }
 
   window.addEventListener("load", initSSE);

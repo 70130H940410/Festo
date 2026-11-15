@@ -1,0 +1,259 @@
+{
+  "test_date": "2026-11-15",
+  "timezone": "Asia/Taipei",
+  "usb_removed": "confirmed by user before restart and test",
+  "runtime_directory": "D:\\112303555\\FestoSync_Standalone",
+  "cloud_order": {
+    "id": 20,
+    "status": "Completed",
+    "receipts": [
+      {
+        "line_no": 0,
+        "ono": 3556,
+        "product_name": "Basic Fuse Box - Black",
+        "quantity": 1,
+        "wp_no": 5000,
+        "records_verified": true,
+        "position_count": 1
+      }
+    ]
+  },
+  "machine_history": [
+    {
+      "id": 47537,
+      "resource_id": 3,
+      "timestamp": "2026-11-15T09:07:59+00:00",
+      "automatic_mode": true,
+      "manual_mode": false,
+      "busy": true,
+      "reset": false,
+      "error_l0": false,
+      "error_l1": false,
+      "error_l2": false
+    },
+    {
+      "id": 47538,
+      "resource_id": 3,
+      "timestamp": "2026-11-15T09:08:12+00:00",
+      "automatic_mode": true,
+      "manual_mode": false,
+      "busy": false,
+      "reset": false,
+      "error_l0": false,
+      "error_l1": false,
+      "error_l2": false
+    },
+    {
+      "id": 47539,
+      "resource_id": 3,
+      "timestamp": "2026-11-15T09:08:32+00:00",
+      "automatic_mode": true,
+      "manual_mode": false,
+      "busy": true,
+      "reset": false,
+      "error_l0": false,
+      "error_l1": false,
+      "error_l2": false
+    },
+    {
+      "id": 47540,
+      "resource_id": 3,
+      "timestamp": "2026-11-15T09:08:46+00:00",
+      "automatic_mode": true,
+      "manual_mode": false,
+      "busy": false,
+      "reset": false,
+      "error_l0": false,
+      "error_l1": false,
+      "error_l2": false
+    }
+  ],
+  "transient_read_failure": {
+    "queried_at": "2026-11-15T09:10:08.888219+00:00",
+    "connection": "degraded",
+    "machines_error": "機台資料讀取失敗，請稍後重試。",
+    "mes_ono": 3556,
+    "order_id": "202611151708001",
+    "order": {
+      "end": "2026-11-15T09:08:46+00:00",
+      "ono": 3556,
+      "start": "2026-11-15T09:07:58+00:00",
+      "state": 100
+    },
+    "steps": [
+      {
+        "description": "release a defined part on stopper 1",
+        "end": "2026-11-15T09:08:12+00:00",
+        "ono": 3556,
+        "resource_id": 3,
+        "start": "2026-11-15T09:07:58+00:00",
+        "step_no": 10,
+        "wp_no": 5000
+      },
+      {
+        "description": "store a part from stopper 2",
+        "end": "2026-11-15T09:08:46+00:00",
+        "ono": 3556,
+        "resource_id": 3,
+        "start": "2026-11-15T09:08:31+00:00",
+        "step_no": 20,
+        "wp_no": 5000
+      }
+    ],
+    "website_status": "completed",
+    "piece_tracking_available": false,
+    "robot_tracking_available": false
+  },
+  "final_checks": [
+    {
+      "queried_at": "2026-11-15T09:11:00.930135+00:00",
+      "connection": "connected",
+      "machines_error": null,
+      "mes_ono": 3556,
+      "order_id": "202611151708001",
+      "order": {
+        "end": "2026-11-15T09:08:46+00:00",
+        "ono": 3556,
+        "start": "2026-11-15T09:07:58+00:00",
+        "state": 100
+      },
+      "steps": [
+        {
+          "description": "release a defined part on stopper 1",
+          "end": "2026-11-15T09:08:12+00:00",
+          "ono": 3556,
+          "resource_id": 3,
+          "start": "2026-11-15T09:07:58+00:00",
+          "step_no": 10,
+          "wp_no": 5000
+        },
+        {
+          "description": "store a part from stopper 2",
+          "end": "2026-11-15T09:08:46+00:00",
+          "ono": 3556,
+          "resource_id": 3,
+          "start": "2026-11-15T09:08:31+00:00",
+          "step_no": 20,
+          "wp_no": 5000
+        }
+      ],
+      "website_status": "completed",
+      "piece_tracking_available": false,
+      "robot_tracking_available": false,
+      "machines": [
+        {
+          "AutomaticMode": true,
+          "Busy": false,
+          "ErrorL0": false,
+          "ErrorL1": false,
+          "ErrorL2": false,
+          "ManualMode": false,
+          "ResourceID": 3,
+          "ResourceName": "CP-F-ASRS32-P",
+          "freshness": "recent",
+          "recorded_at": "2026-11-15T09:08:46+00:00"
+        }
+      ]
+    },
+    {
+      "queried_at": "2026-11-15T09:11:05.033583+00:00",
+      "connection": "connected",
+      "machines_error": null,
+      "mes_ono": 3556,
+      "order_id": "202611151708001",
+      "order": {
+        "end": "2026-11-15T09:08:46+00:00",
+        "ono": 3556,
+        "start": "2026-11-15T09:07:58+00:00",
+        "state": 100
+      },
+      "steps": [
+        {
+          "description": "release a defined part on stopper 1",
+          "end": "2026-11-15T09:08:12+00:00",
+          "ono": 3556,
+          "resource_id": 3,
+          "start": "2026-11-15T09:07:58+00:00",
+          "step_no": 10,
+          "wp_no": 5000
+        },
+        {
+          "description": "store a part from stopper 2",
+          "end": "2026-11-15T09:08:46+00:00",
+          "ono": 3556,
+          "resource_id": 3,
+          "start": "2026-11-15T09:08:31+00:00",
+          "step_no": 20,
+          "wp_no": 5000
+        }
+      ],
+      "website_status": "completed",
+      "piece_tracking_available": false,
+      "robot_tracking_available": false,
+      "machines": [
+        {
+          "AutomaticMode": true,
+          "Busy": false,
+          "ErrorL0": false,
+          "ErrorL1": false,
+          "ErrorL2": false,
+          "ManualMode": false,
+          "ResourceID": 3,
+          "ResourceName": "CP-F-ASRS32-P",
+          "freshness": "recent",
+          "recorded_at": "2026-11-15T09:08:46+00:00"
+        }
+      ]
+    },
+    {
+      "queried_at": "2026-11-15T09:11:09.364042+00:00",
+      "connection": "connected",
+      "machines_error": null,
+      "mes_ono": 3556,
+      "order_id": "202611151708001",
+      "order": {
+        "end": "2026-11-15T09:08:46+00:00",
+        "ono": 3556,
+        "start": "2026-11-15T09:07:58+00:00",
+        "state": 100
+      },
+      "steps": [
+        {
+          "description": "release a defined part on stopper 1",
+          "end": "2026-11-15T09:08:12+00:00",
+          "ono": 3556,
+          "resource_id": 3,
+          "start": "2026-11-15T09:07:58+00:00",
+          "step_no": 10,
+          "wp_no": 5000
+        },
+        {
+          "description": "store a part from stopper 2",
+          "end": "2026-11-15T09:08:46+00:00",
+          "ono": 3556,
+          "resource_id": 3,
+          "start": "2026-11-15T09:08:31+00:00",
+          "step_no": 20,
+          "wp_no": 5000
+        }
+      ],
+      "website_status": "completed",
+      "piece_tracking_available": false,
+      "robot_tracking_available": false,
+      "machines": [
+        {
+          "AutomaticMode": true,
+          "Busy": false,
+          "ErrorL0": false,
+          "ErrorL1": false,
+          "ErrorL2": false,
+          "ManualMode": false,
+          "ResourceID": 3,
+          "ResourceName": "CP-F-ASRS32-P",
+          "freshness": "recent",
+          "recorded_at": "2026-11-15T09:08:46+00:00"
+        }
+      ]
+    }
+  ]
+}

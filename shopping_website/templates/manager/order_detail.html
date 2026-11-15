@@ -19,7 +19,7 @@
             <span class="badge" style="background: #3498db; color: white; padding: 2px 8px; border-radius: 4px;">WEB</span>
           {% endif %}
         </td></tr>
-        <tr><th>工廠MES工單(ONo)</th><td>{{ order["mes_ono"] or "排產同步中" }}</td></tr>
+        <tr><th>工廠MES工單(ONo)</th><td>{% if mes.receipts %}{{ mes.receipts | map(attribute='ono') | join(', ') }}{% else %}{{ order["mes_ono"] or "尚未確認工廠接收" }}{% endif %}</td></tr>
         <tr><th>下單時間</th><td>{{ order["date"] }}</td></tr>
         <tr><th>下單帳號</th><td>{{ order["customer_name"] }}</td></tr>
         <tr><th>聯絡人姓名</th><td><strong>{{ order["contact_name"] or order["customer_name"] }}</strong></td></tr>
@@ -34,6 +34,42 @@
       </tbody>
     </table>
   </div>
+
+  <section class="card" aria-labelledby="mes-dispatch-title">
+    <h3 id="mes-dispatch-title">送至工廠 MES</h3>
+    <p>沿用原本同步程式。黑／藍／白的未加工料號為 210／410／610；每個品項還需選擇 MES 製程。</p>
+    <p>雲端狀態：<strong>{{ mes.cloud_status or '尚未確認' }}</strong>。
+      工廠收到後會回傳工單編號；雲端候送不代表已開始加工。</p>
+    {% if mes.error or order.mes_dispatch_error %}<p role="alert">{{ mes.error or order.mes_dispatch_error }}</p>{% endif %}
+    {% if mes.receipts %}
+      <table><thead><tr><th>品項</th><th>數量</th><th>MES 製程</th><th>工廠接收工單</th></tr></thead><tbody>
+      {% for receipt in mes.receipts %}<tr><td>{{ receipt.product_name }}</td><td>{{ receipt.quantity }}</td><td>{{ receipt.wp_no }}</td><td>{{ receipt.ono }}</td></tr>{% endfor %}
+      </tbody></table>
+    {% elif order.mes_request %}
+      <p>下發請求已保存，不建立重複請求。若顯示「MES Needs Review」，請先核對工廠結果。</p>
+      {% if order.mes_dispatch_state == 'queued' %}
+      <form method="post" action="{{ url_for('manager.manager_send_to_mes', order_id=order.order_id) }}">
+        <input type="hidden" name="csrf_token" value="{{ mes_csrf }}"><input type="hidden" name="action" value="retry">
+        <button class="btn btn-secondary" type="submit">重試同步原請求</button>
+      </form>
+      {% endif %}
+    {% elif order.status == 'active' and not order.mes_ono and order.supabase_order_id and mes.lines and mes.plans and mes.cloud_status in ['Pending Payment', 'MES Awaiting Plan'] %}
+      <form method="post" action="{{ url_for('manager.manager_send_to_mes', order_id=order.order_id) }}">
+        <input type="hidden" name="csrf_token" value="{{ mes_csrf }}">
+        {% for line in mes.lines %}
+        <p><label for="mes-wp-{{ loop.index }}">{{ line.product_name }} · {{ line.quantity }} 件 · 未加工料號 {{ line.raw_pno }}</label>
+        <select id="mes-wp-{{ loop.index }}" name="wp_no" required><option value="">選擇 MES 製程</option>
+          {% for plan in mes.plans if plan.wp_no %}<option value="{{ plan.wp_no }}">{{ plan.wp_no }} · {{ plan.description }}</option>{% endfor %}
+        </select></p>
+        {% endfor %}
+        <p>工廠端會核對所選製程的上料顏色與站點順序。不相符時保持待確認，不自行更改加工參數。</p>
+        <button type="submit" class="btn btn-primary">確認製程並送至工廠</button>
+      </form>
+    {% else %}
+      <p>目前不可下發：需已確認訂單、完成雲端同步，且沒有既有 MES 工單。舊版派工狀態需先核對，避免重複建單。</p>
+    {% endif %}
+    <p><a href="{{ url_for('manager.manager_order_detail', order_id=order.order_id) }}">重新讀取工廠接收結果</a></p>
+  </section>
 
   <div class="mt-2">
     <a href="{{ url_for('manager.manager_orders') }}">← 回訂單總覽</a>

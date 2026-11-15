@@ -14,7 +14,25 @@ import os
 import sys
 import time
 import pyodbc
-from datetime import datetime, timedelta
+import socket
+from datetime import datetime, timedelta, timezone
+
+# Access MES timestamps are Taiwan wall time without an offset. Preserve aware
+# timestamps; attach +08:00 only to naive values, then serialize explicit UTC.
+def factory_timestamp(value):
+    if value is None:
+        return None
+    stamp = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone(timedelta(hours=8)))
+    return stamp.astimezone(timezone.utc).isoformat()
+
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+except ImportError:
+    pass
 
 # ── Supabase SDK ──────────────────────────────────────────────
 try:
@@ -99,6 +117,37 @@ def sync_static_tables(sb: "Client"):
 
 
 # ── 動態表同步（定期執行）────────────────────────────────────
+def sync_finished_steps(sb, cur, state):
+    cur.execute(
+        "SELECT TOP 100 WPNo, StepNo, ONo, Description, ResourceID, "
+        "PlanedStart, PlanedEnd, Start, [End] "
+        "FROM tblFinStep ORDER BY ONo DESC, StepNo DESC, [End] DESC, Start DESC"
+    )
+    latest = {}
+    for row in cur.fetchall():
+        key = (row[2], row[1])
+        # shortcut: cloud stores one row per order/step; add piece identity before using this as per-piece history.
+        rank = (row[8] or datetime.min, row[7] or datetime.min, tuple(str(v) for v in row))
+        if key not in latest or rank > latest[key][0]:
+            latest[key] = (rank, row)
+    snapshots = state.setdefault("finstep_snapshots", {})
+    pending = {}
+    for key, (_, row) in latest.items():
+        record = {
+            "wp_no": row[0], "step_no": row[1], "ono": row[2],
+            "description": row[3] or "", "resource_id": row[4] or 0,
+            **{name: factory_timestamp(row[index])
+               for name, index in (("planed_start", 5), ("planed_end", 6), ("start", 7), ("end", 8))},
+        }
+        if snapshots.get(key) != record:
+            pending[key] = record
+    if pending:
+        sb.table("tbl_fin_step").upsert(list(pending.values()), on_conflict="ono,step_no").execute()
+        # Failed uploads must remain eligible for the next cycle.
+        snapshots.update(pending)
+        print(f"  [+] tblFinStep: {len(pending)} order/step snapshots updated")
+
+
 def sync_dynamic_tables(sb: "Client", state: dict):
     """同步機台狀態、工單、已完工步驟（只推送新資料）"""
     acc = open_access()
@@ -131,11 +180,7 @@ def sync_dynamic_tables(sb: "Client", state: dict):
                     is_rollback = False
                     if sb_id > access_max_id:
                         is_rollback = True
-                    elif access_latest_ts and sb_ts_str:
-                        # 比較 ISO 時間
-                        acc_iso = access_latest_ts.isoformat() if hasattr(access_latest_ts, 'isoformat') else str(access_latest_ts)
-                        if sb_ts_str > acc_iso and sb_id != access_max_id:
-                            is_rollback = True
+                    # Only the monotonic source ID identifies a rollback.
 
                     if is_rollback:
                         print(f"  [Time Alignment] 偵測到工廠資料庫版本還原！(工廠 Max ID: {access_max_id}, 雲端殘留 ID: {sb_id})")
@@ -186,7 +231,7 @@ def sync_dynamic_tables(sb: "Client", state: dict):
                     data.append({
                         "id": row_id,
                         "resource_id": res_id,
-                        "timestamp": ts.isoformat() if hasattr(ts, 'isoformat') else str(ts) if ts else None,
+                        "timestamp": factory_timestamp(ts),
                         "automatic_mode": bool(r[3]),
                         "manual_mode": bool(r[4]),
                         "busy": bool(r[5]),
@@ -226,10 +271,10 @@ def sync_dynamic_tables(sb: "Client", state: dict):
                     order_snapshots[ono] = cur_snap
                     data.append({
                         "ono": ono,
-                        "planed_start": r[1].isoformat() if r[1] else None,
-                        "planed_end": r[2].isoformat() if r[2] else None,
-                        "start": r[3].isoformat() if r[3] else None,
-                        "end": r[4].isoformat() if r[4] else None,
+                        "planed_start": factory_timestamp(r[1]),
+                        "planed_end": factory_timestamp(r[2]),
+                        "start": factory_timestamp(r[3]),
+                        "end": factory_timestamp(r[4]),
                         "state": r[5], "enabled": bool(r[6]), "cno": r[7],
                     })
             if data:
@@ -238,33 +283,16 @@ def sync_dynamic_tables(sb: "Client", state: dict):
     except Exception as e:
         print(f"  [WARNING] tblOrder sync failed: {e}")
 
+    # MES moves completed headers from tblOrder to tblFinOrder.
+    try:
+        from mes_completion import sync_finished_orders
+        sync_finished_orders(sb, cur, state, factory_timestamp)
+    except Exception as e:
+        print(f"  [WARNING] tblFinOrder sync failed: {e}")
+
     # ── tblFinStep（已完工步驟：取最近 100 筆更新）────────────
     try:
-        cur.execute(
-            "SELECT TOP 100 WPNo, StepNo, ONo, Description, ResourceID, "
-            "PlanedStart, PlanedEnd, Start, [End] "
-            "FROM tblFinStep ORDER BY ONo DESC, StepNo DESC"
-        )
-        rows = cur.fetchall()
-        if rows:
-            data = []
-            finstep_snapshots = state.setdefault("finstep_snapshots", {})
-            for r in rows:
-                key = (r[2], r[1])  # (ono, step_no)
-                cur_snap = (str(r[7]), str(r[8])) # (start, end)
-                if key not in finstep_snapshots or finstep_snapshots[key] != cur_snap:
-                    finstep_snapshots[key] = cur_snap
-                    data.append({
-                        "wp_no": r[0], "step_no": r[1], "ono": r[2],
-                        "description": r[3] or "", "resource_id": r[4] or 0,
-                        "planed_start": r[5].isoformat() if r[5] else None,
-                        "planed_end": r[6].isoformat() if r[6] else None,
-                        "start": r[7].isoformat() if r[7] else None,
-                        "end": r[8].isoformat() if r[8] else None,
-                    })
-            if data:
-                sb.table("tbl_fin_step").upsert(data, on_conflict="ono,step_no").execute()
-                print(f"  [+] tblFinStep: {len(data)} steps updated")
+        sync_finished_steps(sb, cur, state)
     except Exception as e:
         print(f"  [WARNING] tblFinStep sync failed: {e}")
 
@@ -320,7 +348,7 @@ def sync_dynamic_tables(sb: "Client", state: dict):
                     "zone":         zone,
                     "quantity":     qty,
                     "quantity_max": qty_max,
-                    "time_stamp":   ts.isoformat() if hasattr(ts, 'isoformat') else str(ts) if ts else None,
+                    "time_stamp":   factory_timestamp(ts),
                     "pallet_id":    pallet,
                 })
                 
@@ -340,65 +368,17 @@ def sync_dynamic_tables(sb: "Client", state: dict):
 
 # ── 下行訂單同步（從 Supabase line_orders 拉取新訂單下發至 Festo MES tblOrder）──
 def sync_orders_down_to_mes(sb: "Client", state: dict):
-    """
-    查詢 Supabase 中新確認的訂單（status='Confirmed'），
-    在工廠 Access FestoMES.accdb 中自動生成新工單 (ONo)，
-    並將產生之工廠 ONo 回寫至 Supabase 訂單狀態。
-    """
-    try:
-        resp = sb.table("line_orders").select("*").eq("status", "Confirmed").order("id").limit(10).execute()
-        orders = resp.data or []
-        if not orders:
-            return
-
-        acc = open_access()
-        cur = acc.cursor()
-
-        for order in orders:
-            order_id = order["id"]
-            contact_name = order.get("contact_name") or order.get("client_id")
-            print(f"  [MES Dispatch] 偵測到雲端新訂單 #{order_id} (客戶: {contact_name})，正在排入工廠 MES...")
-
-            # 1. 取得目前工廠 MAX ONo
-            cur.execute("SELECT MAX(ONo) FROM tblOrder")
-            max_row = cur.fetchone()
-            max_ono = int(max_row[0] or 0) if max_row and max_row[0] is not None else 0
-            new_ono = max_ono + 1
-
-            # 2. 預計開始與完工時間
-            now_dt = datetime.now()
-            plan_end_dt = now_dt + timedelta(minutes=15)
-
-            # 3. 寫入工廠真實 tblOrder (State=1 排定/待加工, Enabled=True)
-            cur.execute(
-                """
-                INSERT INTO tblOrder (ONo, PlanedStart, PlanedEnd, Start, [End], CNo, State, Enabled, Release)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (new_ono, now_dt, plan_end_dt, None, None, 1, 1, True, now_dt)
-            )
-
-            # 4. 回寫 Supabase 訂單狀態 (標註已下發的工廠 ONo)
-            new_status = f"In Production (MES ONo: {new_ono})"
-            sb.table("line_orders").update({"status": new_status}).eq("id", order_id).execute()
-            print(f"  [+] 成功下發訂單 #{order_id} 至工廠 MES！生成工單 ONo: {new_ono}，狀態已更新。")
-
-        acc.close()
-
-        # 5. 同步更新網站端本地 order_management.db
-        try:
-            from core.order_sync import sync_line_orders_to_order_list
-            sync_line_orders_to_order_list()
-        except Exception as e:
-            pass
-    except Exception as e:
-        print(f"  [WARNING] 下行訂單同步失敗: {e}")
+    """Use the existing downlink, but let MES4 create the full workplan."""
+    from mes_dispatch import sync_ready_orders
+    journal = os.environ.get('MES_DISPATCH_JOURNAL', os.path.join(os.path.dirname(__file__), 'mes_dispatch_receipts.db'))
+    sync_ready_orders(sb, open_access, journal,
+                      os.environ.get('MES_HOST', '127.0.0.1'), int(os.environ.get('MES_PORT', '2000')))
 
 
 # ── 主程式 ────────────────────────────────────────────────────
 def main():
     print("=" * 55)
-    print("  Festo MES Sync Agent (Two-Way Sync)")
+    print("  Festo MES Sync Agent (Two-Way Sync / UTC timestamps + archived completion)")
     print(f"  Access DB : {FESTO_DB_PATH}")
     print(f"  Supabase  : {SUPABASE_URL}")
     print(f"  Interval  : {SYNC_INTERVAL}s")
@@ -410,6 +390,22 @@ def main():
 
     sb = create_client(SUPABASE_URL, SUPABASE_KEY)
     print("[OK] Connected to Supabase")
+
+    if '--check' in sys.argv:
+        # Read-only deployment check; no sync/upload or create-order packets.
+        acc = open_access()
+        try:
+            service = acc.cursor().execute('SELECT [Short] FROM tblSqlQuery WHERE MClass=101 AND MNo=2').fetchone()
+            if not service or service[0] != 'SetNewOrder':
+                raise ValueError('Expected MES4 SetNewOrder service 101/2 was not found')
+        finally:
+            acc.close()
+        sb.table('line_orders').select('id').limit(1).execute()
+        host, port = os.environ.get('MES_HOST', '127.0.0.1'), int(os.environ.get('MES_PORT', '2000'))
+        with socket.create_connection((host, port), timeout=10):
+            pass
+        print('[CHECK OK] Access / Supabase / MES TCP reachable. No order sent; no data uploaded.')
+        return
 
     # 初次同步靜態資料表
     try:
