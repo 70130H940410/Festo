@@ -15,10 +15,22 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Database backups
-*.db-journal
-shopping_website/database/mes_dispatch_receipts.db*
-shopping_website/mes_dispatch_receipts.db*
+# Local databases, transaction files, and backups (keep schema/code tracked)
+*.db
+*.db-*
+*.db.*
+*.sqlite
+*.sqlite-*
+*.sqlite.*
+*.sqlite3
+*.sqlite3-*
+*.sqlite3.*
+*.accdb
+*.accdb.*
+*.laccdb
+*.mdb
+*.mdb.*
+*.ldb
 
 # Local connection credentials
 .env
