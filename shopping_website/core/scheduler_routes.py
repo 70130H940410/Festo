@@ -71,8 +71,7 @@ def _build_engine_from_active_orders() -> SchedulerEngine:
     conn = get_order_mgmt_db()
     try:
         rows = conn.execute(
-            "SELECT order_id, customer_name, product, total_price, note, amount, "
-            "step_name, status, date, estimated_delivery "
+            "SELECT * "
             "FROM order_list WHERE status IN ('active', 'pending_payment') "
             "ORDER BY date ASC"
         ).fetchall()
@@ -349,22 +348,16 @@ def api_compare_algorithms():
     if session.get("role") != "admin":
         abort(403)
 
+    from .schedule_comparison import compare_snapshot
     try:
-        engine     = _build_engine_from_active_orders()
-        comparison = []
-        for algo in Algorithm:
-            result = engine.schedule(algo)
-            comparison.append(
-                {
-                    "algorithm":          algo.value,
-                    "total_makespan_sec": result.total_makespan_sec,
-                    "bottleneck_station": result.bottleneck_station,
-                    "order_sequence":     result.order_sequence,
-                }
-            )
-        return jsonify({"comparison": comparison})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        result = compare_snapshot(_build_engine_from_active_orders())
+        response = jsonify(result)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 422
+    except Exception:
+        return jsonify({"error": "比較失敗，請確認訂單與製程資料後重試。"}), 500
 
 
 @scheduler_bp.route("/api/reorder", methods=["POST"])

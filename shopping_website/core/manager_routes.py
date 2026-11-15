@@ -97,14 +97,11 @@ def manager_inventory():
     
     # 庫存以工廠 ASRS 倉儲為單一事實來源 (SSOT)
     products = MesDataService.get_unified_products()
-    warehouse = MesDataService.get_warehouse_inventory()
-    buffer_positions = MesDataService.get_buffer_positions()
+
 
     return render_template(
         "manager/inventory.html",
         products=products,
-        warehouse=warehouse,
-        buffer_positions=buffer_positions,
         error_message=error_message,
         success_message=success_message,
     )

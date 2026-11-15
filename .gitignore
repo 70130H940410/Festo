@@ -17,3 +17,8 @@ Thumbs.db
 
 # Database backups
 *.db-journal
+
+# Local connection credentials
+.env
+.env.*
+!.env.example

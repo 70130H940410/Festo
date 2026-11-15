@@ -1,0 +1,27 @@
+<section class="factory-game" aria-labelledby="floor-title">
+  <div class="floor-heading">
+    <div><h2 id="floor-title">CP Factory · 2D 工廠</h2><p>流程示範 · 工件沿站點加工，R 在 E、B、入出貨站之間搬運。</p></div>
+    <span class="floor-mode" id="floor-source">本機訂單進度，非實機定位</span>
+  </div>
+  <div class="floor-controls">
+    <label for="floor-mode">模式</label><select id="floor-mode"><option value="live">訂單進度同步</option><option value="demo">流程示範</option></select>
+    <label for="floor-order">訂單</label><select id="floor-order" data-order="{{ order_info.order_id if order_info is defined else '' }}"><option value="">讀取訂單中…</option></select>
+    <button type="button" class="btn btn-primary" id="floor-play">開始播放</button>
+    <button type="button" class="btn btn-secondary" id="floor-reset">重新開始</button>
+    <label for="floor-speed">速度</label><select id="floor-speed"><option value="1">1×</option><option value="2">2×</option><option value="4">4×</option></select>
+    <label for="floor-time">進度</label><input id="floor-time" type="range" min="0" max="160" value="0" step="0.1">
+    <output id="floor-clock" for="floor-time">0 / 160 秒</output>
+  </div>
+  <p id="floor-sync" role="status" class="floor-note">正在讀取本機訂單紀錄…</p>
+  <div class="floor-scroll" tabindex="0" role="region" aria-label="2D 工廠地圖，小螢幕可左右捲動">
+    <canvas id="factory-floor" width="1200" height="780" aria-label="上方由左至右為 F、A 倉儲、E、D，G 在 F 正下方，A2 在 A1 上方；右下方為 C、H、B；中央為 R 搬運區，正下方為新增入出貨手臂站。">此瀏覽器不支援 Canvas，請使用下方站點說明。</canvas>
+  </div>
+  <div class="floor-bottom">
+    <div><label for="floor-station">查看機台</label> <select id="floor-station"></select><p id="floor-detail" role="status"></p></div>
+    <div class="floor-legend"><span>藍色工件：未加工</span><span>橙色工件：半成品</span><span>綠色工件：成品</span><strong id="floor-count">完成 0 / 4 件</strong></div>
+  </div>
+  <p class="floor-note">站點依提供的配置圖排列，距離與搬運秒數為示意。A1／A2 共用同一台倉儲；新手臂站位於 R 虛線區正下方。動畫不寫入庫存、不派工、不控制機台；下方原有資料與操作另行保留。</p>
+<details id="floor-piece-details"><summary>逐件進度明細</summary><div class="data-scroll"><table><thead><tr><th>工件</th><th>機台</th><th>步驟</th><th>狀態</th><th>完成步驟</th></tr></thead><tbody id="floor-piece-list"></tbody></table></div></details>
+</section>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/factory-floor.css') }}">
+<script type="module" src="{{ url_for('static', filename='js/factory-floor.js') }}"></script>

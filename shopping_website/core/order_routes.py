@@ -330,7 +330,7 @@ def submit_order_api():
         # 步驟 1：依據工廠 ASRS 倉儲真實在庫量校驗庫存 (SSOT)
         # ------
         from .mes_data_service import MesDataService
-        wh_inv = MesDataService.get_warehouse_inventory()
+        wh_inv = {p["name"]: {"count": p["stock"]} for p in MesDataService.get_unified_products()}
         for item in cart_items:
             pname = item.get("name")
             req_qty = item.get("quantity", 0)
@@ -338,7 +338,7 @@ def submit_order_api():
             if req_qty > avail_stock:
                 return jsonify({
                     "success": False,
-                    "message": f"工廠 ASRS 倉儲庫存不足！[{pname}] 目前在庫庫存僅剩 {avail_stock} 件，請重新調整數量。"
+                    "message": f"外部供料庫存不足！[{pname}] 目前在庫庫存僅剩 {avail_stock} 件，請重新調整數量。"
                 }), 400
 
         conn_prod  = get_product_db()

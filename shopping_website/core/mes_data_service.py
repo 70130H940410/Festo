@@ -830,70 +830,12 @@ class MesDataService:
 
     @staticmethod
     def get_unified_products() -> List[Dict[str, Any]]:
-        """
-        取得統一產品清單：
-        總庫存 = ASRS 庫存 (現貨) + 未入倉儲庫存 (待入庫)
-        對客顯示與預設下單上限一律以總庫存為準。
-        """
-        wh = MesDataService.get_warehouse_inventory()
-
-        # 讀取未入倉儲庫存（來自 product.db 的 products 表）
-        unwarehoused_stocks: Dict[int, int] = {}
+        """External supply stock only; ASRS occupancy is never saleable inventory."""
+        from .db import get_product_db
+        conn = get_product_db()
         try:
-            from .db import get_product_db
-            conn_prod = get_product_db()
-            cur = conn_prod.cursor()
-            cur.execute("SELECT id, stock FROM products")
-            for row in cur.fetchall():
-                unwarehoused_stocks[int(row["id"])] = int(row["stock"] or 0)
-            conn_prod.close()
-        except Exception as e:
-            print(f"⚠️ [MesDataService] 讀取 product.db 庫存失敗: {e}")
-
-        product_defs = [
-            {
-                "id": 1,
-                "name": "Basic Fuse Box - Black",
-                "f_no": 210,
-                "description": "黑色上蓋標準保險絲盒",
-                "base_price": 100,
-            },
-            {
-                "id": 2,
-                "name": "Basic Fuse Box - Blue",
-                "f_no": 410,
-                "description": "藍色上蓋標準保險絲盒",
-                "base_price": 100,
-            },
-            {
-                "id": 3,
-                "name": "Basic Fuse Box - White",
-                "f_no": 610,
-                "description": "白色上蓋標準保險絲盒",
-                "base_price": 100,
-            },
-        ]
-
-        products = []
-        for p in product_defs:
-            stock_info = wh.get(p["name"], {})
-            asrs_stock = stock_info.get("count", 0)
-            # 未入倉儲庫存：從 product.db 取，若無則預設
-            unwarehoused = unwarehoused_stocks.get(p["id"], 0)
-            total_stock = asrs_stock + unwarehoused
-
-            products.append({
-                "id": p["id"],
-                "name": p["name"],
-                "f_no": p["f_no"],
-                "description": p["description"],
-                "base_price": p["base_price"],
-                "stock": total_stock,                      # 預設對客顯示庫存：總庫存 (ASRS + 未入倉)
-                "total_stock": total_stock,                # 總庫存
-                "asrs_stock": asrs_stock,                  # ASRS 實體倉儲在庫
-                "unwarehoused_stock": unwarehoused,        # 未入倉儲庫存
-                "warehouse_positions": stock_info.get("positions", []),
-            })
-        return products
-
-
+            rows = conn.execute("SELECT id, name, description, base_price, stock FROM products ORDER BY id").fetchall()
+            return [dict(r, total_stock=int(r["stock"] or 0),
+                         unwarehoused_stock=int(r["stock"] or 0)) for r in rows]
+        finally:
+            conn.close()

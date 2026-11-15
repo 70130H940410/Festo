@@ -2,6 +2,7 @@
 {% block title %}工廠實時監控 (Admin Dashboard){% endblock %}
 
 {% block content %}
+{% include "factory/_floor.html" %}
 <div style="display:flex; justify-content:space-between; align-items:flex-end;">
   <h2 class="page-title">🏭 智慧工廠實時監控</h2>
   <span id="last-update" class="text-muted">載入中...</span>
@@ -9,14 +10,14 @@
 
 <div style="display:flex; gap:1.5rem; margin-top:1rem; flex-wrap:wrap;">
   <!-- 機台狀態 -->
-  <div style="flex:2; min-width:300px;">
+  <div class="responsive-panel" style="flex:2; min-width:300px;">
     <h3>即時機台狀態</h3>
     <div id="station-container" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:1rem;">
     </div>
   </div>
-  
+
   <!-- 物料庫存 -->
-  <div style="flex:1; min-width:280px;">
+  <div class="responsive-panel" style="flex:1; min-width:280px;">
     <h3>即時物料庫存</h3>
     <div id="material-container" style="background:#fff; padding:1.5rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
     </div>
@@ -48,13 +49,13 @@
 
 <!-- 報表區 -->
 <div style="display:flex; gap:1.5rem; margin-top:2.5rem; flex-wrap:wrap;">
-  <div style="flex:1; min-width:300px; background:#fff; padding:1.5rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+  <div class="responsive-panel" style="flex:1; min-width:300px; background:#fff; padding:1.5rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
     <h3 style="margin-bottom:1rem; text-align:center;">訂單狀態分佈</h3>
     <div style="position:relative; height:300px;">
         <canvas id="statusPieChart"></canvas>
     </div>
   </div>
-  <div style="flex:2; min-width:400px; background:#fff; padding:1.5rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
+  <div class="responsive-panel" style="flex:2; min-width:400px; background:#fff; padding:1.5rem; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.05);">
     <h3 style="margin-bottom:1rem; text-align:center;">每日完成訂單趨勢</h3>
     <div style="position:relative; height:300px;">
         <canvas id="dailyLineChart"></canvas>
@@ -70,19 +71,19 @@ async function fetchStatus() {
     try {
         const res = await fetch("/admin/api/status");
         const data = await res.json();
-        
+
         document.getElementById("last-update").textContent = "即時監控連線中 | 最後更新: " + data.now;
-        
+
         // 渲染機台
         const stationDiv = document.getElementById("station-container");
         stationDiv.innerHTML = data.stations.map(s => {
             let isError = s.is_error === 1;
             let isRunning = s.current_order_id && !isError;
             let badge = isError ? `<span class="badge badge-danger">故障停機</span>` :
-                        isRunning ? `<span class="badge badge-primary">運轉中</span>` : 
+                        isRunning ? `<span class="badge badge-primary">運轉中</span>` :
                         `<span class="badge badge-success">閒置</span>`;
-            
-            let btn = isError ? 
+
+            let btn = isError ?
               `<button onclick="repairMachine('${s.station}')" class="btn btn-success" style="padding:0.25rem 0.5rem;font-size:0.85rem;margin-top:0.5rem;">🔧 修復機台</button>` :
               `<button onclick="breakMachine('${s.station}')" class="btn btn-danger" style="padding:0.25rem 0.5rem;font-size:0.85rem;margin-top:0.5rem;">💥 模擬故障</button>`;
 
@@ -94,7 +95,7 @@ async function fetchStatus() {
                         ${badge}
                     </div>
                     <div style="font-size:0.9rem; color:#555; min-height:40px;">
-                        ${isRunning ? `單號: <span class="mono">${s.current_order_id}</span><br>預計完成: ${s.busy_until}` : 
+                        ${isRunning ? `單號: <span class="mono">${s.current_order_id}</span><br>預計完成: ${s.busy_until}` :
                           isError ? "等待維修中，產線停擺" : "等待派工中"}
                     </div>
                 </div>
@@ -103,7 +104,7 @@ async function fetchStatus() {
                 </div>
             </div>`;
         }).join("");
-        
+
         // 渲染物料
         const matDiv = document.getElementById("material-container");
         matDiv.innerHTML = data.materials.map(m => {
@@ -120,7 +121,7 @@ async function fetchStatus() {
                 </div>
             </div>`;
         }).join("");
-        
+
         // 渲染訂單
         const ordDiv = document.getElementById("order-container");
         if (data.orders.length === 0) {
@@ -168,7 +169,7 @@ async function fetchAnalytics() {
     try {
         const res = await fetch("/admin/api/analytics");
         const data = await res.json();
-        
+
         // Render Pie Chart
         const ctxPie = document.getElementById('statusPieChart').getContext('2d');
         if (statusPieChart) statusPieChart.destroy();
@@ -183,7 +184,7 @@ async function fetchAnalytics() {
             },
             options: { responsive: true, maintainAspectRatio: false }
         });
-        
+
         // Render Line Chart
         const ctxLine = document.getElementById('dailyLineChart').getContext('2d');
         if (dailyLineChart) dailyLineChart.destroy();

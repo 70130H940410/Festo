@@ -1018,37 +1018,15 @@ def api_mes_status():
     if session.get("role") != "admin":
         abort(403)
 
-    from .mes_data_service import MesDataService
-    import datetime
-
-    try:
-        raw_machines = MesDataService.get_machine_status()
-
-        machines = []
-        for m in raw_machines:
-            machines.append(
-                {
-                    "ResourceID":    m.get("resource_id"),
-                    "ResourceName":  m.get("name"),
-                    "AutomaticMode": m.get("automatic"),
-                    "ManualMode":    m.get("manual"),
-                    "Busy":          m.get("busy"),
-                    "ErrorL0":       m.get("error"),
-                }
-            )
-
-        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        return jsonify(
-            {
-                "machines": machines,
-                "orders":   [],
-                "now":      now_str,
-            }
-        )
-    except Exception as e:
-        print("MES Status Error:", e)
-        return jsonify({"error": str(e)}), 500
+    from .db import get_supabase_client
+    from .mes_dashboard_service import cloud_snapshot
+    client = get_supabase_client()
+    if client is None:
+        return jsonify({"error": "尚未設定 Supabase 連線", "connection": "unconfigured"}), 503
+    snapshot = cloud_snapshot(client)
+    response = jsonify(snapshot)
+    response.headers["Cache-Control"] = "no-store"
+    return response, (503 if snapshot["machines_error"] and snapshot["orders_error"] else 200)
 
 
 @factory_bp.route("/api/mes_analytics", methods=["GET"])
@@ -1197,19 +1175,59 @@ def api_buffer_status():
     if session.get("role") != "admin":
         abort(403)
 
-    from .mes_data_service import MesDataService
+    from .buffer_status import read_buffer_status
     try:
-        positions = MesDataService.get_buffer_positions()
-        # f_no != 0 表示格位有加工品（0=空, 25=盤子, 210=黑, 410=藍, 610=白）
-        occupied = sum(1 for p in positions if p.get("f_no", 0) != 0)
-        return jsonify({
-            "positions": positions,
-            "summary": {
-                "total":    len(positions),
-                "occupied": occupied,
-                "empty":    len(positions) - occupied,
-            },
-        })
-    except Exception as e:
-        print("Buffer Status Error:", e)
-        return jsonify({"error": str(e)}), 500
+        response = jsonify(read_buffer_status())
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    except Exception:
+        return jsonify({"error": "倉位資料讀取失敗，不能判定為空位。"}), 503
+
+
+@factory_bp.route("/api/floor_orders")
+@login_required
+def floor_orders():
+    db = _conn(_db_path(_ORDER_DB_FILENAME))
+    try:
+        if session.get("role") == "admin":
+            rows = db.execute("SELECT order_id, status FROM order_list ORDER BY date DESC").fetchall()
+        else:
+            account = session.get("account") or session.get("username") or session.get("full_name")
+            rows = db.execute("SELECT order_id, status FROM order_list WHERE customer_name=? ORDER BY date DESC", (account,)).fetchall()
+    finally:
+        db.close()
+    response = jsonify(orders=[dict(r) for r in rows])
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@factory_bp.route("/api/floor_status/<order_id>")
+@login_required
+def floor_status(order_id):
+    from .floor_progress import project_pieces
+    order_db = _conn(_db_path(_ORDER_DB_FILENAME))
+    product_db = _conn(_db_path(_PRODUCT_DB_FILENAME))
+    try:
+        order_db.execute("BEGIN")
+        order = order_db.execute("SELECT order_id, customer_name, step_name, amount, status FROM order_list WHERE order_id=?", (order_id,)).fetchone()
+        if order is None:
+            abort(404)
+        account = session.get("account") or session.get("username") or session.get("full_name")
+        if session.get("role") != "admin" and (not account or order['customer_name'] != account):
+            abort(403)
+        chain = _parse_step_chain(order['step_name'] or '')
+        steps = _get_step_defs(product_db, chain)
+        if len(steps) != len(chain):
+            steps = []
+        rows = order_db.execute("SELECT piece_no, step_order, state, started_at, finished_at FROM piece_step_progress WHERE order_id=?", (order_id,)).fetchall()
+        failures = {(r['current_piece_no'], r['current_step_order']) for r in order_db.execute("SELECT current_piece_no, current_step_order FROM station_state WHERE current_order_id=? AND is_error=1", (order_id,))}
+        amount = max(1, int(order['amount'] or 1))
+        response = jsonify(order_id=order_id, status=order['status'], amount=amount,
+            source='local_piece_step_progress', queried_at=datetime.now().isoformat(timespec='seconds'),
+            latest_record_at=max((str(r[key]) for r in rows for key in ('started_at', 'finished_at') if r[key]), default=None),
+            pieces=project_pieces(amount, steps, rows, failures))
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    finally:
+        order_db.close()
+        product_db.close()

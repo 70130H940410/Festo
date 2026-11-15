@@ -15,7 +15,7 @@
 {% endif %}
 
 <form id="order-form" method="post">
-  <table>
+  <div class="data-scroll" role="region" aria-label="資料表格，可左右捲動" tabindex="0"><table>
     <thead>
       <tr>
         <th style="width: 100px;">圖片</th>
@@ -45,7 +45,7 @@
             {{ p.stock }} 件
           </div>
           <div style="font-size: 0.8rem; color: #7f8c8d; margin-top: 2px;">
-            ASRS現貨: {{ p.asrs_stock }} | 待入庫: {{ p.unwarehoused_stock }}
+            外部供料庫存：{{ p.stock }}（不含 ASRS 倉位）
           </div>
         </td>
         <td>
@@ -64,7 +64,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
 
   <div class="card mt-2">
     <h3>本次下單摘要</h3>

@@ -449,6 +449,14 @@
     color: #475569;
     font-weight: 600;
 }
+.buf-cell .buf-icon {font-size: .8rem; line-height:1.2; padding:4px; text-align:center;}
+.buf-cell.stage-raw {background:#dbeafe;color:#1e3a8a;}
+.buf-cell.stage-wip {background:#ffedd5;color:#7c2d12;}
+.buf-cell.stage-finished {background:#dcfce7;color:#14532d;}
+.buf-cell.stage-plate {background:#e2e8f0;color:#334155;border:2px solid #94a3b8;}
+.buf-cell.stage-empty {background:#f1f5f9;color:#475569;}
+.buf-cell.stage-unknown {background:#f3e8ff;color:#581c87;}
+.buf-cell .buf-pos-label,.buf-cell .buf-ono {color:inherit;}
 </style>
 
 <div class="mes-dashboard">
@@ -463,7 +471,8 @@
         </div>
     </div>
 
-    <div class="mes-section-title">機台即時狀態 (Resource Monitoring)</div>
+    <p id="mes-data-info" role="status" style="color:#475569;overflow-wrap:anywhere;">正在查詢雲端資料…</p>
+    <div class="mes-section-title">機台狀態與紀錄 (Resource Monitoring)</div>
     <div id="machines-grid" class="mes-grid">
         <!-- 機台卡片會透過 JS 動態載入 -->
         <div style="color: #64748b; padding: 2rem;">載入中，請稍候...</div>
@@ -474,7 +483,7 @@
         <svg style="vertical-align:middle;margin-right:0.4rem;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-4 0v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/>
         </svg>
-        倉儲 Buffer 狀態 (ASRS Buffer Positions)
+        ASRS 製程暫存倉位（32 格，與外部供料庫存分開）
     </div>
 
     <div class="buffer-panel">
@@ -485,15 +494,10 @@
             <span class="buffer-stat-chip empty" id="buf-empty">空位：—</span>
         </div>
 
-        <!-- 圖例說明 -->
-        <div class="buffer-legend">
-            <div class="legend-item"><div class="legend-dot" style="background:#1f2937;border:1px solid #6b7280;"></div>黑色加工品 (Pno 210)</div>
-            <div class="legend-item"><div class="legend-dot" style="background:#3b82f6;"></div>藍色加工品 (Pno 410)</div>
-            <div class="legend-item"><div class="legend-dot" style="background:#e2e8f0;border:1px solid #94a3b8;"></div>白色加工品 (Pno 610)</div>
-            <div class="legend-item"><div class="legend-dot" style="background:linear-gradient(135deg,#6b7280,#e5e7eb);border:1px solid #d1d5db;"></div>盤子/托盤 (Pno 25)</div>
-            <div class="legend-item"><div class="legend-dot" style="background:rgba(51,65,85,0.6);border:1px solid #334155;"></div>空位 (Pno 0)</div>
-        </div>
-
+        <p>未加工 → 加工中（半成品） → 成品；空位表示未存放物料。此區不計入外部供料庫存。</p>
+        <div id="buffer-stage-summary" role="status">讀取加工狀態中…</div>
+        <p>加工狀態依 MES 欄位對照；資料不足時標示「待確認」。代號 0 為空位，25 為 PLATE（僅托盤），托盤不計入工件數。</p>
+        <div class="buffer-legend">未加工（藍） · 半成品（橙） · 成品（綠） · 空位（灰） · PLATE（銀灰） · 待確認（紫）</div>
         <!-- 格線 左 1~16 / 右 17~32 -->
         <div class="buffer-two-panel">
 
@@ -532,22 +536,23 @@
     </div>
 
     <div class="mes-section-title">機台能耗與氣壓分析 (Analytics)</div>
+    <p id="analytics-status" role="status"></p>
     <div style="display:flex; gap:1.5rem; margin-bottom:2rem; flex-wrap:wrap;">
-        <div style="flex:1; min-width:300px; background:#1e293b; padding:1.5rem; border-radius:10px; border:1px solid #334155; height:350px;">
-            <h3 style="margin-top:0; color:#f1f5f9; font-size:1.1rem; text-align:center;">機台平均電力消耗 (W)</h3>
+        <div class="energy-panel">
+            <h3 class="energy-title">機台平均電力消耗 (W)</h3>
             <div style="position:relative; height:280px; width:100%;">
                 <canvas id="energyChart"></canvas>
             </div>
         </div>
-        <div style="flex:1; min-width:300px; background:#1e293b; padding:1.5rem; border-radius:10px; border:1px solid #334155; height:350px;">
-            <h3 style="margin-top:0; color:#f1f5f9; font-size:1.1rem; text-align:center;">機台平均氣壓消耗 (L/min)</h3>
+        <div class="energy-panel">
+            <h3 class="energy-title">機台平均氣壓消耗 (L/min)</h3>
             <div style="position:relative; height:280px; width:100%;">
                 <canvas id="airChart"></canvas>
             </div>
         </div>
     </div>
 
-    <div class="mes-section-title">最近生產工單 (Recent Orders)</div>
+    <div class="mes-section-title">雲端工單（依工單編號由大到小，最多 50 筆）</div>
     <div class="mes-table-container">
         <table class="mes-table">
             <thead>
@@ -575,7 +580,7 @@
     async function fetchMesAnalytics() {
         try {
             const res = await fetch("/factory/api/mes_analytics?_t=" + Date.now());
-            if (!res.ok) return;
+            if (!res.ok) throw new Error('Analytics unavailable');
             const data = await res.json();
             
             if(data.error) return;
@@ -634,115 +639,74 @@
 
         } catch(error) {
             console.error("Fetch analytics error:", error);
+            document.getElementById('analytics-status').textContent = '能耗資料暫未提供：目前此功能仍依賴本機 Access 資料庫。';
         }
     }
 
+    function escapeText(value) {
+        const span = document.createElement('span');
+        span.textContent = value == null ? '—' : String(value);
+        return span.innerHTML;
+    }
+    function displayTime(value) {
+        if (!value) return '未提供';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '時間格式異常';
+        return date.toLocaleString('zh-TW', {timeZone: 'Asia/Taipei', hour12: false}) + ' (台灣)';
+    }
+    const freshnessLabels = {recent: '近期紀錄', old: '紀錄超過 5 分鐘',
+        unknown: '無有效時間', clock_unverified: '時間異常，待核對時區'};
+    let mesRequestPending = false;
     async function fetchMesStatus() {
+        if (mesRequestPending) return;
+        mesRequestPending = true;
+        const badge = document.getElementById('connection-status');
+        const grid = document.getElementById('machines-grid');
+        const tbody = document.getElementById('orders-tbody');
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 20000);
         try {
-            const res = await fetch("/factory/api/mes_status?_t=" + Date.now());
-            const statusBadge = document.getElementById("connection-status");
-            
-            let data = null;
-            try {
-                data = await res.json();
-            } catch (e) {
-                // Ignore JSON parse error if response is not JSON
-            }
-            
-            if (!res.ok) {
-                const errMsg = (data && data.error) ? data.error : ("API responded with status " + res.status);
-                throw new Error(errMsg);
-            }
-            
-            if (data && data.error) {
-                 throw new Error(data.error);
-            }
-
-            statusBadge.className = "mes-status-badge";
-            statusBadge.innerHTML = `<div class="mes-pulse"></div> 即時連線 (最後更新: ${data.now})`;
-
-            // 渲染機台卡片
-            const grid = document.getElementById("machines-grid");
-            if (data.machines && data.machines.length > 0) {
-                grid.innerHTML = data.machines.map(m => {
-                    let stateClass = "state-idle";
-                    let stateText = "閒置";
-                    
-                    if (m.ErrorL0) {
-                        stateClass = "state-error";
-                        stateText = "異常 (Error)";
-                    } else if (m.Busy) {
-                        stateClass = "state-running";
-                        stateText = "運作中 (Busy)";
-                    } else if (m.AutomaticMode) {
-                        stateClass = "state-running";
-                        stateText = "自動模式待命";
-                    } else if (m.ManualMode) {
-                        stateClass = "state-manual";
-                        stateText = "手動模式";
-                    }
-
-                    return `
-                        <div class="mes-card">
-                            <div class="glass-glow"></div>
-                            <div class="mes-card-header">
-                                <h3 class="mes-card-title">${m.ResourceName || '未命名機台'} <span style="font-size:0.8rem;color:#64748b;font-weight:normal;">#${m.ResourceID}</span></h3>
-                                <span class="mes-machine-state ${stateClass}">${stateText}</span>
-                            </div>
-                            <div class="mes-card-body">
-                                <div class="mes-stat">
-                                    <span class="mes-stat-label">自動模式</span>
-                                    <span class="mes-stat-value" style="color:${m.AutomaticMode ? '#10b981' : '#64748b'}">${m.AutomaticMode ? 'ON' : 'OFF'}</span>
-                                </div>
-                                <div class="mes-stat">
-                                    <span class="mes-stat-label">手動模式</span>
-                                    <span class="mes-stat-value" style="color:${m.ManualMode ? '#f59e0b' : '#64748b'}">${m.ManualMode ? 'ON' : 'OFF'}</span>
-                                </div>
-                                <div class="mes-stat">
-                                    <span class="mes-stat-label">異常燈號 (ErrorL0)</span>
-                                    <span class="mes-stat-value" style="color:${m.ErrorL0 ? '#ef4444' : '#10b981'}">${m.ErrorL0 ? 'TRUE' : 'FALSE'}</span>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }).join("");
-            } else {
-                grid.innerHTML = `<div style="color: #64748b; padding: 2rem; grid-column: 1 / -1; text-align: center;">查無機台資料</div>`;
-            }
-
-            // 渲染訂單表格
-            const tbody = document.getElementById("orders-tbody");
-            if (data.orders && data.orders.length > 0) {
-                tbody.innerHTML = data.orders.map(o => {
-                    let stateColor = o.State === 4 ? '#10b981' : (o.State === 2 ? '#38bdf8' : '#94a3b8'); // 假設 4 是完成，2 是處理中
-                    return `
-                        <tr>
-                            <td style="font-family:monospace;font-weight:bold;">${o.ONo}</td>
-                            <td><span style="color:${stateColor}">${o.State}</span></td>
-                            <td class="mes-stat-label">${o.PlanedStart || '-'}</td>
-                            <td class="mes-stat-label">${o.PlanedEnd || '-'}</td>
-                            <td>${o.Start || '-'}</td>
-                            <td>${o.End || '-'}</td>
-                        </tr>
-                    `;
-                }).join("");
-            } else {
-                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; color:#64748b;">查無訂單資料</td></tr>`;
-            }
-
+            const res = await fetch('/factory/api/mes_status?_t=' + Date.now(), {signal: controller.signal});
+            const data = await res.json();
+            if (!res.ok) throw new Error('雲端資料查詢失敗，請稍後重試');
+            const healthy = data.connection === 'connected' && data.freshness === 'recent';
+            badge.className = 'mes-status-badge' + (healthy ? '' : ' error');
+            badge.textContent = (data.connection === 'connected' ? '雲端查詢成功' : '部分資料讀取失敗')
+                + ' · ' + (freshnessLabels[data.freshness] || '時間未知');
+            document.getElementById('mes-data-info').textContent =
+                '來源：Supabase｜查詢時間：' + displayTime(data.queried_at)
+                + '｜最新機台紀錄：' + displayTime(data.latest_record_at)
+                + '。同步心跳：尚未提供；紀錄較舊不等於機台離線。';
+            grid.innerHTML = data.machines_error ? escapeText(data.machines_error) :
+                data.machines.map(m => {
+                    const current = m.freshness === 'recent';
+                    const state = !current ? '目前狀態待確認' : m.ErrorL0 ? '異常' : m.Busy ? '運作中' : '待命';
+                    const flag = value => value == null ? '未知' : value ? 'ON' : 'OFF';
+                    return `<div class="mes-card"><div class="mes-card-header">
+                        <h3 class="mes-card-title">${escapeText(m.ResourceName)} #${escapeText(m.ResourceID)}</h3>
+                        <span class="mes-machine-state ${current && m.ErrorL0 ? 'state-error' : 'state-idle'}">${state}</span>
+                        </div><div class="mes-card-body">
+                        <div>紀錄時間：${escapeText(displayTime(m.recorded_at))}</div>
+                        <div>${escapeText(freshnessLabels[m.freshness])}</div>
+                        <div>紀錄值：自動 ${flag(m.AutomaticMode)} / 手動 ${flag(m.ManualMode)} / 忙碌 ${flag(m.Busy)} / 異常 ${flag(m.ErrorL0)}</div>
+                        </div></div>`;
+                }).join('') || '雲端沒有機台資源資料';
+            tbody.innerHTML = data.orders_error
+                ? `<tr><td colspan="6">${escapeText(data.orders_error)}</td></tr>`
+                : data.orders.length ? data.orders.map(o => `<tr>
+                    <td>${escapeText(o.ONo)}</td><td>代碼 ${escapeText(o.State)}</td>
+                    <td>${escapeText(displayTime(o.PlanedStart))}</td><td>${escapeText(displayTime(o.PlanedEnd))}</td>
+                    <td>${escapeText(displayTime(o.Start))}</td><td>${escapeText(displayTime(o.End))}</td>
+                    </tr>`).join('') : '<tr><td colspan="6">雲端目前沒有工單資料</td></tr>';
         } catch (error) {
-            console.error("Fetch MES error:", error);
-            const statusBadge = document.getElementById("connection-status");
-            statusBadge.className = "mes-status-badge error";
-            statusBadge.innerHTML = `❌ 連線失敗`;
-            
-            // 將錯誤訊息顯示在畫面上
-            document.getElementById("machines-grid").innerHTML = `<div style="color: #ef4444; padding: 2rem; grid-column: 1 / -1; text-align: center; border: 1px solid #ef4444; border-radius: 8px; background: rgba(239, 68, 68, 0.1);">
-                <h3>讀取機台資料失敗</h3>
-                <p>${error.message}</p>
-                <p style="font-size: 0.9em; color: #f8fafc; margin-top: 1rem;">提示：請確認您的 Access 資料庫 (FestoMES.accdb) 沒有被其他程式（如 MS Access）獨佔開啟。</p>
-            </div>`;
-            document.getElementById("orders-tbody").innerHTML = `<tr><td colspan="6" style="text-align:center; color:#ef4444;">連線失敗</td></tr>`;
+            badge.className = 'mes-status-badge error';
+            badge.textContent = '雲端查詢失敗 · 目前狀態未知';
+            document.getElementById('mes-data-info').textContent = '本次查詢未成功，無法確認機台或工單的目前狀態。';
+            grid.textContent = '機台資料暫時無法取得，將自動重試。';
+            tbody.innerHTML = '<tr><td colspan="6">工單讀取失敗，將自動重試。</td></tr>';
+        } finally {
+            clearTimeout(timeout);
+            mesRequestPending = false;
         }
     }
 
@@ -768,13 +732,14 @@
             const res = await fetch("/factory/api/buffer_status?_t=" + Date.now());
             if (!res.ok) return;
             const data = await res.json();
-            if (data.error) return;
+            if (!res.ok || data.error) throw new Error("Buffer unavailable");
 
             // 更新統計摘要（以 f_no != 0 判斷佔用）
             document.getElementById('buf-total').textContent    = `總格數：${data.summary.total}`;
-            document.getElementById('buf-occupied').textContent = `佔用：${data.summary.occupied}`;
+            document.getElementById('buf-occupied').textContent = `已確認工件：${data.summary.raw + data.summary.wip + data.summary.finished}`;
             document.getElementById('buf-empty').textContent    = `空位：${data.summary.empty}`;
 
+            document.getElementById('buffer-stage-summary').textContent = `未加工 ${data.summary.raw} 格｜加工中（半成品）${data.summary.wip} 格｜成品 ${data.summary.finished} 格｜空位 ${data.summary.empty} 格｜PLATE ${data.summary.plate} 格｜待確認 ${data.summary.unknown} 格`;
             // 渲染 左區(1~16) + 右區(17~32)
             const gridLeft  = document.getElementById('buffer-grid-left');
             const gridRight = document.getElementById('buffer-grid-right');
@@ -791,45 +756,54 @@
                 const cfg = getBufPnoCfg(p.f_no);
                 // 在哪區哪列哪行
                 const posIn16 = (p.buf_pos - 1) % 16;          // 0~15 內部索引
-                const row = Math.floor(posIn16 / 4) + 1;        // 1~4
-                const col = (posIn16 % 4) + 1;                  // 1~4
+                const row = 4 - Math.floor(posIn16 / 4);        // 由上至下 1~4
+                const col = 4 - (posIn16 % 4);                  // 由左至右 1~4
 
                 const tooltipLines = [
                     `<b>BufPos ${p.buf_pos}</b> (${sideLabel} R${row}-C${col})`,
-                    `加工品: ${cfg.label}`,
+                    `物料種類: ${cfg.label}`,
+                    `加工狀態: ${escapeText(p.processing_label || "待確認")}`,
+                    escapeText(p.status_reason || "缺少資料"),
                     `Pno: ${p.f_no || '—'}`,
                     p.o_no ? `工單: #${p.o_no}` : '工單: 無',
                     p.time_stamp ? `更新: ${p.time_stamp}` : '',
                 ].filter(Boolean).join('<br>');
 
                 return `
-                    <div class="buf-cell ${cfg.cls}" id="buf-pos-${p.buf_pos}">
+                    <div class="buf-cell stage-${["raw","wip","finished","empty","plate"].includes(p.processing_status) ? p.processing_status : "unknown"}" id="buf-pos-${p.buf_pos}">
                         <span class="buf-pos-label">${p.buf_pos}</span>
-                        <span class="buf-icon">${cfg.icon}</span>
-                        <span class="buf-ono">${cfg.pnoText || ''}</span>
+                        <span class="buf-icon">${escapeText(p.processing_label || "待確認")}</span>
+                        <span class="buf-ono">${p.f_no === 25 ? '托盤' : p.f_no ? 'PNo '+escapeText(p.f_no) : ''}</span>
                         <div class="buf-tooltip">${tooltipLines}</div>
                     </div>
                 `;
             }
 
-            // 左區：BufPos 1~16 (index 0~15)
+            const positionsById = new Map(data.positions.map(p => [Number(p.buf_pos), p]));
+            // 左區：16 在左上，1 在右下
             let htmlL = '';
-            for (let i = 0; i < 16; i++) {
-                const p = data.positions[i] || { buf_pos: i+1, f_no: 0, o_no: 0, time_stamp: '' };
+            for (let pos = 16; pos >= 1; pos--) {
+                const p = positionsById.get(pos) || { buf_pos: pos, f_no: 0, o_no: 0, time_stamp: '' };
                 htmlL += makeCellHtml(p, '左');
             }
             gridLeft.innerHTML = htmlL;
 
-            // 右區：BufPos 17~32 (index 16~31)
+            // 右區：32 在左上，17 在右下
             let htmlR = '';
-            for (let i = 16; i < 32; i++) {
-                const p = data.positions[i] || { buf_pos: i+1, f_no: 0, o_no: 0, time_stamp: '' };
+            for (let pos = 32; pos >= 17; pos--) {
+                const p = positionsById.get(pos) || { buf_pos: pos, f_no: 0, o_no: 0, time_stamp: '' };
                 htmlR += makeCellHtml(p, '右');
             }
             gridRight.innerHTML = htmlR;
 
         } catch (err) {
             console.error('fetchBufferStatus error:', err);
+            document.getElementById('buffer-stage-summary').textContent = '連線失敗：32 格狀態未知，將自動重試。';
+            document.getElementById('buf-occupied').textContent = '已確認工件：—';
+            document.getElementById('buf-empty').textContent = '空位：—';
+            for (const [id, max] of [['buffer-grid-left',16],['buffer-grid-right',32]]) {
+                document.getElementById(id).innerHTML = Array.from({length:16},(_,i)=>`<div class="buf-cell stage-unknown" id="buf-pos-${max-i}"><span class="buf-pos-label">${max-i}</span><span class="buf-icon">待確認</span></div>`).join('');
+            }
         }
     }
 

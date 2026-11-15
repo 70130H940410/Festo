@@ -3,15 +3,18 @@
 {% block title %}首頁 - 智慧工廠下單系統{% endblock %}
 
 {% block content %}
+<div class="home-page">
+<section class="home-intro">
 <h1>智慧工廠遠端下單與製程模擬系統</h1>
 <p class="text-muted">
   透過這個網站，你可以遠端下單到智慧工廠，並即時查看類似 Uber Eats 的產線運作模擬畫面。
   工廠管理者也可以在後台管理庫存與標準製程模板。
 </p>
+</section>
 
-<div class="grid-2 mt-2">
+<div class="home-entry-grid">
   <!-- 前台：一般使用者 -->
-  <div class="card">
+  <section class="home-entry">
     <h2>我是要下單的客戶</h2>
     <p class="text-muted">
       適合業務 / 客戶：登入後可以選擇產品、設定數量，並查看工廠產線的運作模擬。
@@ -23,14 +26,14 @@
       <li>在「工廠運作模擬」頁面追蹤進度</li>
     </ul>
 
-    <div class="mt-2">
-      <a class="btn" href="{{ url_for('auth.login') }}">登入開始下單</a>
+    <div class="home-actions">
+      <a class="btn btn-primary" href="{{ url_for('auth.login') }}">登入開始下單</a>
       <a class="btn btn-secondary" href="{{ url_for('auth.register_customer') }}">註冊一般使用者</a>
     </div>
-  </div>
+  </section>
 
   <!-- 後台：工廠管理者 -->
-  <div class="card">
+  <section class="home-entry">
     <h2>我是工廠管理者 / 工程師</h2>
     <p class="text-muted">
       適合產線工程師 / 管理者：可以維護庫存資料、管理標準製程模板，並查看訂單與流程。
@@ -41,14 +44,14 @@
       <li>未來可串接 MES / PLC 取得實際產線進度</li>
     </ul>
 
-    <div class="mt-2">
-      <a class="btn" href="{{ url_for('auth.register_manager') }}">工廠管理者註冊</a>
+    <div class="home-actions">
+      <a class="btn btn-primary" href="{{ url_for('auth.register_manager') }}">工廠管理者註冊</a>
       <a class="btn btn-secondary" href="{{ url_for('auth.login') }}">已有帳號？前往登入</a>
     </div>
-  </div>
+  </section>
 </div>
 
-<div class="card mt-3">
+<section class="home-overview">
   <h2>系統架構簡介</h2>
   <p class="text-muted">
     這個專題網站大致分成三個區塊：前台下單系統、後台管理系統，以及工廠運作模擬畫面。
@@ -59,6 +62,6 @@
     <li><strong>工廠模擬：</strong>用時間軸顯示各步驟的 pending / running / finished 狀態。</li>
     <li><strong>後台管理：</strong>管理者可以調整庫存與標準製程模板。</li>
   </ul>
+</section>
 </div>
 {% endblock %}
-

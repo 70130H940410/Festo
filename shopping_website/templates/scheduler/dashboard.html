@@ -112,20 +112,20 @@
 
 {% block content %}
 <div class="scheduler-page">
-  <h1>📊 排程儀表板</h1>
+  <h1>排程儀表板</h1>
 
   <!-- 控制列 -->
   <div class="control-bar">
-    <label>排程演算法</label>
+    <label for="algo-select">排程演算法</label>
     <select id="algo-select">
       <option value="fcfs">FCFS — 先到先做</option>
       <option value="spt">SPT — 最短加工優先</option>
       <option value="edd">EDD — 最早交期優先</option>
       <option value="weighted">Weighted — 加權複合</option>
     </select>
-    <button class="btn-primary" onclick="loadSchedule()">▶ 執行排程</button>
-    <button onclick="compareAlgorithms()">⚖ 比較所有演算法</button>
-    <button onclick="loadSchedule()">🔄 重新整理</button>
+    <button class="btn-primary" onclick="loadSchedule()">執行排程</button>
+    <button onclick="compareAlgorithms()">比較所有演算法</button>
+    <button onclick="loadSchedule()">重新整理</button>
   </div>
 
   <!-- 統計卡片 -->
@@ -140,7 +140,7 @@
       <div class="sub" id="stat-makespan-sec"></div>
     </div>
     <div class="stat-card bottleneck">
-      <div class="label">🔴 瓶頸站</div>
+      <div class="label">瓶頸站</div>
       <div class="value" id="stat-bottleneck">-</div>
     </div>
     <div class="stat-card">
@@ -162,21 +162,26 @@
   <div class="bottom-panels">
     <!-- 產能負載圖 -->
     <div class="panel">
-      <h3>📈 工站產能負載</h3>
+      <h3>工站產能負載</h3>
       <div id="station-load-container"></div>
     </div>
 
     <!-- 訂單排隊面板 -->
     <div class="panel">
-      <h3>📋 訂單排隊順序 <span style="font-size:.7rem;color:#64748b">(可拖拉排序)</span></h3>
+      <h3>訂單排隊順序 <span style="font-size:.7rem;color:#64748b">(可拖拉排序)</span></h3>
       <div id="order-queue-container"></div>
-      <button class="btn-primary" style="margin-top:.8rem;width:100%" onclick="saveOrder()">💾 儲存排序</button>
-      <div class="algo-compare" id="algo-compare-section" style="display:none">
-        <h3>⚖ 演算法比較</h3>
-        <table id="algo-compare-table"></table>
-      </div>
+      <button class="btn-primary" style="margin-top:.8rem;width:100%" onclick="saveOrder()">儲存排序</button>
+
     </div>
   </div>
+      <div class="panel algo-compare" id="algo-compare-section" style="display:none">
+        <h3>演算法比較</h3>
+        <p>同一批訂單、相同起算時間，比較總工期與交期表現。結果為模擬預覽，不會下發工廠。</p>
+        <p id="compare-status" role="status"></p>
+        <button id="export-comparison" disabled onclick="exportComparison(false)">匯出比較 CSV</button>
+        <button id="export-details" disabled onclick="exportComparison(true)">匯出訂單明細 CSV</button>
+        <div style="overflow-x:auto"><table id="algo-compare-table"></table></div>
+      </div>
 </div>
 
 <script>
@@ -238,7 +243,7 @@ function drawGantt(tasks) {
   ctx.scale(dpr, dpr);
 
   // 背景
-  ctx.fillStyle = '#0f172a';
+  ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, chartW, chartH);
 
   // 時間軸刻度
@@ -251,7 +256,7 @@ function drawGantt(tasks) {
     const t = new Date(minTime + timeSpan * i / tickCount);
     const label = t.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     ctx.fillText(label, x, topMargin - 8);
-    ctx.strokeStyle = '#1e293b';
+    ctx.strokeStyle = '#d7dfe5';
     ctx.beginPath(); ctx.moveTo(x, topMargin); ctx.lineTo(x, chartH - 20); ctx.stroke();
   }
 
@@ -265,13 +270,13 @@ function drawGantt(tasks) {
     const y = topMargin + rowIdx * (rowH + rowGap);
 
     // 站名
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = '#475569';
     ctx.font = '12px sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(name, leftMargin - 10, y + rowH / 2 + 4);
 
     // 行背景
-    ctx.fillStyle = rowIdx % 2 === 0 ? '#1e293b' : '#172032';
+    ctx.fillStyle = rowIdx % 2 === 0 ? '#edf2f5' : '#f8fafb';
     ctx.fillRect(leftMargin, y, barArea, rowH);
 
     // 該站的 tasks
@@ -317,7 +322,7 @@ function drawGantt(tasks) {
   orderIds.forEach((oid, i) => {
     ctx.fillStyle = colorMap[oid];
     ctx.fillRect(legendX, legendY - 8, 12, 12);
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = '#475569';
     const short = oid.length > 10 ? '...' + oid.slice(-6) : oid;
     ctx.fillText(short, legendX + 16, legendY + 2);
     legendX += 100;
@@ -497,30 +502,58 @@ async function saveOrder() {
   } catch(e) { alert('儲存失敗: ' + e); }
 }
 
+let comparisonSnapshot = null;
+let comparisonPending = false;
+function compareEscape(value) {
+  const node = document.createElement('span'); node.textContent = value == null ? '—' : String(value); return node.innerHTML;
+}
 async function compareAlgorithms() {
+  if (comparisonPending) return;
+  comparisonPending = true;
+  comparisonSnapshot = null;
+  const section = document.getElementById('algo-compare-section');
+  const status = document.getElementById('compare-status');
+  const table = document.getElementById('algo-compare-table');
+  section.style.display = 'block';
+  status.textContent = '正在建立同一批訂單的比較快照…';
+  table.innerHTML = '';
+  document.getElementById('export-comparison').disabled = true;
+  document.getElementById('export-details').disabled = true;
   try {
-    const res = await fetch('/scheduler/api/compare_algorithms').then(r => r.json());
-    const section = document.getElementById('algo-compare-section');
-    const table = document.getElementById('algo-compare-table');
-    section.style.display = 'block';
-
-    const rows = res.comparison || [];
-    const best = rows.reduce((a, b) => a.total_makespan_sec < b.total_makespan_sec ? a : b, rows[0]);
-
-    const nameMap = {fcfs:'FCFS 先到先做', spt:'SPT 最短優先', edd:'EDD 最早交期', weighted:'Weighted 加權'};
-    table.innerHTML = `
-      <tr><th>演算法</th><th>總工期</th><th>訂單數</th></tr>
-      ${rows.map(r => {
-        const isBest = r.algorithm === best.algorithm;
-        const m = Math.floor(r.total_makespan_sec/60); const s = r.total_makespan_sec%60;
-        return `<tr class="${isBest?'best':''}">
-          <td>${nameMap[r.algorithm]||r.algorithm} ${isBest?'⭐':''}</td>
-          <td>${m}分${s}秒</td>
-          <td>${(r.order_sequence||[]).length}</td>
-        </tr>`;
-      }).join('')}
-    `;
-  } catch(e) { console.error(e); }
+    const response = await fetch('/scheduler/api/compare_algorithms');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || '比較失敗');
+    if (!data.order_count) { status.textContent = '目前沒有待排訂單，尚無可比較或匯出的結果。'; return; }
+    comparisonSnapshot = data;
+    status.textContent = `快照 ${data.snapshot_id.slice(0,8)}｜起算 ${data.start_time}（台灣）｜${data.order_count} 張訂單，其中 ${data.due_date_count} 張有交期、${data.missing_created_count} 張缺建立時間。來源：${data.source}。${data.assumptions} 延遲指標只計有交期訂單；★ 表示總工期最短，可能並列，並非所有指標都最佳。`;
+    const names = {fcfs:'FIFO / FCFS',spt:'SPT',edd:'EDD',weighted:'Weighted'};
+    const number = x => x == null ? '無交期資料' : Number(x).toFixed(2);
+    table.innerHTML = '<tr><th>方法</th><th>總工期（秒）</th><th>總延遲（秒）</th><th>平均延遲（秒）</th><th>延遲訂單數</th><th>運算（毫秒）</th><th>訂單順序</th></tr>' + data.comparison.map(r =>
+      `<tr class="${r.best_makespan?'best':''}"><td>${names[r.algorithm]} ${r.best_makespan?'★':''}</td><td>${number(r.total_makespan_sec)}</td><td>${number(r.total_tardiness_sec)}</td><td>${number(r.mean_tardiness_sec)}</td><td>${r.tardy_orders == null?'無交期資料':r.tardy_orders}</td><td>${number(r.runtime_ms)}</td><td>${compareEscape(r.order_sequence.join(' → '))}</td></tr>`).join('');
+    document.getElementById('export-comparison').disabled = false;
+    document.getElementById('export-details').disabled = false;
+  } catch(e) { status.textContent = '無法比較：' + e.message; }
+  finally { comparisonPending = false; }
+}
+function comparisonCsvCell(value) {
+  let text = value == null ? '' : String(value);
+  if (/^[\s]*[=+@-]/.test(text)) text = "'" + text;
+  return '"' + text.replace(/"/g, '""') + '"';
+}
+function exportComparison(details) {
+  const data = comparisonSnapshot;
+  if (!data) return;
+  const common = [data.snapshot_id,data.input_hash,data.start_time,data.timezone,data.source,data.assumptions,data.order_count,data.due_date_count];
+  const headers = ['snapshot_id','input_sha256','start_time','timezone','source','assumptions','order_count','due_date_count'];
+  const rows = [headers.concat(details ? ['algorithm','order_id','due_date','completion','tardiness_sec'] : ['algorithm','makespan_sec','total_tardiness_sec','mean_tardiness_sec','tardy_orders','runtime_ms','order_sequence'])];
+  for (const result of data.comparison) {
+    if (details) for (const d of result.details) rows.push(common.concat([result.algorithm,d.order_id,d.due_date,d.completion,d.tardiness_sec]));
+    else rows.push(common.concat([result.algorithm,result.total_makespan_sec,result.total_tardiness_sec,result.mean_tardiness_sec,result.tardy_orders,result.runtime_ms,JSON.stringify(result.order_sequence)]));
+  }
+  const blob = new Blob(['\ufeff'+rows.map(r=>r.map(comparisonCsvCell).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `schedule-${details?'details':'comparison'}-${data.snapshot_id}.csv`; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
 
 // 初始載入（相容已處於 complete/interactive 狀態的 DOM）

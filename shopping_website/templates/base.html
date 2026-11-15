@@ -10,9 +10,11 @@
   <!-- Loader 樣式 -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/loader.css') }}">
   {% block extra_head %}{% endblock %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/festo-theme.css') }}">
 </head>
 
-<body data-page="{{ request.endpoint or '' }}">
+<body class="festo-theme" data-page="{{ request.endpoint or '' }}">
+  <a class="skip-link" href="#main-content">跳至主要內容</a>
   <!-- 首次進入首頁用 Loader -->
   <div id="page-loader">
     <div class="loader-card">
@@ -33,18 +35,22 @@
 
   <!-- 主畫面 -->
   <header>
-    <nav class="main-nav">
+    <div class="brand-bar">
+      <a class="brand-name" href="{{ url_for('index') }}">FESTO</a>
+      <span class="brand-caption">智慧工廠｜遠端下單與製程監控</span>
+    </div>
+    <nav class="main-nav" aria-label="主要導覽">
 
       <!-- 首頁（直接連結） -->
-      <a class="nav-link" href="{{ url_for('index') }}">首頁</a>
+      <a class="nav-link" href="{{ url_for('index') }}" {% if request.endpoint == 'index' %}aria-current="page"{% endif %}>首頁</a>
 
       <!-- 訂單下拉選單 -->
       <div class="nav-dropdown">
         <button class="nav-dropdown-btn">訂單 <span class="nav-caret">▾</span></button>
         <div class="nav-dropdown-menu">
           <div class="nav-dropdown-menu-inner">
-            <a href="{{ url_for('order.order_page') }}">我要下單</a>
-            <a href="{{ url_for('order.order_history') }}">我的訂單</a>
+            <a href="{{ url_for('order.order_page') }}" {% if request.endpoint == "order.order_page" %}aria-current="page"{% endif %}>我要下單</a>
+            <a href="{{ url_for('order.order_history') }}" {% if request.endpoint == "order.order_history" %}aria-current="page"{% endif %}>我的訂單</a>
           </div>
         </div>
       </div>
@@ -54,7 +60,7 @@
         <button class="nav-dropdown-btn">帳號 <span class="nav-caret">▾</span></button>
         <div class="nav-dropdown-menu">
           <div class="nav-dropdown-menu-inner">
-            <a href="{{ url_for('auth.profile') }}">個人資料</a>
+            <a href="{{ url_for('auth.profile') }}" {% if request.endpoint == "auth.profile" %}aria-current="page"{% endif %}>個人資料</a>
           </div>
         </div>
       </div>
@@ -65,22 +71,22 @@
           <button class="nav-dropdown-btn">管理 <span class="nav-caret">▾</span></button>
           <div class="nav-dropdown-menu">
             <div class="nav-dropdown-menu-inner">
-              <a href="{{ url_for('manager.manager_inventory') }}">庫存管理</a>
-              <a href="{{ url_for('manager.manager_process_templates') }}">製程模板管理</a>
-              <a href="{{ url_for('manager.manager_orders') }}">訂單總覽</a>
+              <a href="{{ url_for('manager.manager_inventory') }}" {% if request.endpoint == "manager.manager_inventory" %}aria-current="page"{% endif %}>庫存管理</a>
+              <a href="{{ url_for('manager.manager_process_templates') }}" {% if request.endpoint == "manager.manager_process_templates" %}aria-current="page"{% endif %}>製程模板管理</a>
+              <a href="{{ url_for('manager.manager_orders') }}" {% if request.endpoint == "manager.manager_orders" %}aria-current="page"{% endif %}>訂單總覽</a>
             </div>
           </div>
         </div>
 
         <!-- 工廠下拉選單 -->
         <div class="nav-dropdown">
-          <button class="nav-dropdown-btn" style="color:#f59e0b; font-weight:700;">工廠 <span class="nav-caret">▾</span></button>
+          <button class="nav-dropdown-btn">工廠 <span class="nav-caret">▾</span></button>
           <div class="nav-dropdown-menu">
             <div class="nav-dropdown-menu-inner">
-              <a href="{{ url_for('admin.dashboard') }}" style="color:#ffc107;">模擬戰情室</a>
-              <a href="{{ url_for('factory.mes_dashboard') }}" style="color:#38bdf8;">真實工廠 (MES)</a>
+              <a href="{{ url_for('admin.dashboard') }}" {% if request.endpoint == "admin.dashboard" %}aria-current="page"{% endif %}>模擬戰情室</a>
+              <a href="{{ url_for('factory.mes_dashboard') }}" {% if request.endpoint == "factory.mes_dashboard" %}aria-current="page"{% endif %}>真實工廠 (MES)</a>
               <div class="nav-dropdown-divider"></div>
-              <a href="{{ url_for('scheduler.dashboard') }}" style="color:#a78bfa;">排程儀表板</a>
+              <a href="{{ url_for('scheduler.dashboard') }}" {% if request.endpoint == "scheduler.dashboard" %}aria-current="page"{% endif %}>排程儀表板</a>
             </div>
           </div>
         </div>
@@ -99,7 +105,7 @@
     </nav>
   </header>
 
-  <main>
+  <main id="main-content" tabindex="-1">
     {% block content %}{% endblock %}
   </main>
 
@@ -307,16 +313,3 @@
   {% block scripts %}{% endblock %}
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-

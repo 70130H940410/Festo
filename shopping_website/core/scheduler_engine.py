@@ -186,7 +186,7 @@ class SchedulerEngine:
             start_time = datetime.now()
 
         # 1. 根據演算法決定訂單排序
-        sorted_orders = self._sort_orders(algorithm, weights)
+        sorted_orders = self._sort_orders(algorithm, weights, start_time)
 
         # 2. 使用模擬法產生甘特圖排程
         result = self._simulate_schedule(sorted_orders, start_time)
@@ -208,7 +208,8 @@ class SchedulerEngine:
     # --- 排序策略 ---
 
     def _sort_orders(self, algorithm: Algorithm,
-                     weights: Optional[Dict[str, float]] = None) -> List[OrderJob]:
+                     weights: Optional[Dict[str, float]] = None,
+                     reference_time: Optional[datetime] = None) -> List[OrderJob]:
         orders = list(self._orders)
         if not orders:
             return orders
@@ -229,7 +230,7 @@ class SchedulerEngine:
         elif algorithm == Algorithm.WEIGHTED:
             # 加權複合排程
             w = weights or {"urgency": 0.4, "spt": 0.3, "edd": 0.3}
-            now = datetime.now()
+            now = reference_time or datetime.now()
 
             max_job_time = max((o.total_job_time for o in orders), default=1) or 1
             max_urgency = max((o.priority for o in orders), default=1) or 1

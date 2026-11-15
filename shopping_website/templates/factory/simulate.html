@@ -4,6 +4,7 @@
 {% block title %}工廠運作模擬 (Demo){% endblock %}
 
 {% block content %}
+{% include "factory/_floor.html" %}
 <div class="page-container">
 
   <h1 class="page-title">工廠運作模擬 (Demo)</h1>
@@ -155,7 +156,7 @@
       const res = await fetch(`/factory/api/order_status/${ORDER_ID}`);
       if (!res.ok) return;
       const data = await res.json();
-      
+
       const st = data.order_info.status;
       if (orderStatusBadge) {
           if (["in_progress", "running", "active"].includes(st)) {
@@ -174,7 +175,7 @@
                           step_state === "error" ? '<span class="badge badge-danger">⚠️ 機台故障，等待維修</span>' :
                           step_state === "running" ? '<span class="badge badge-primary">進行中…</span>' :
                           '<span class="badge badge-secondary">尚未開始</span>';
-          
+
           html += `<li class="timeline-step ${step_state}">
             <div style="display:flex; align-items:center; gap:.6rem; flex-wrap:wrap;">
               <strong>Step ${s.step_order || (idx+1)}：${s.step_name}</strong>
@@ -196,7 +197,7 @@
     }
 
     statusEl.textContent = "即時監控中 (SSE 連線已建立) ...";
-    
+
     const evtSource = new EventSource("/api/stream");
     evtSource.onmessage = function(e) {
         try {
@@ -208,7 +209,7 @@
             console.error(err);
         }
     };
-    
+
     // 初始化先抓取一次最新資料
     updateDOM();
   }
@@ -216,9 +217,3 @@
   window.addEventListener("load", initSSE);
 </script>
 {% endblock %}
-
-
-
-
-
-
