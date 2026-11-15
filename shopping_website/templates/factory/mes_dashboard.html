@@ -579,7 +579,7 @@
 
     async function fetchMesAnalytics() {
         try {
-            const res = await fetch("/factory/api/mes_analytics?_t=" + Date.now());
+            const res = await fetch(window.festoUrl("/factory/api/mes_analytics?_t=") + Date.now());
             if (!res.ok) throw new Error('Analytics unavailable');
             const data = await res.json();
             
@@ -666,7 +666,7 @@
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 20000);
         try {
-            const res = await fetch('/factory/api/mes_status?_t=' + Date.now(), {signal: controller.signal});
+            const res = await fetch(window.festoUrl('/factory/api/mes_status?_t=') + Date.now(), {signal: controller.signal});
             const data = await res.json();
             if (!res.ok) throw new Error('雲端資料查詢失敗，請稍後重試');
             const healthy = data.connection === 'connected' && data.freshness === 'recent';
@@ -729,7 +729,7 @@
 
     async function fetchBufferStatus() {
         try {
-            const res = await fetch("/factory/api/buffer_status?_t=" + Date.now());
+            const res = await fetch(window.festoUrl("/factory/api/buffer_status?_t=") + Date.now());
             if (!res.ok) return;
             const data = await res.json();
             if (!res.ok || data.error) throw new Error("Buffer unavailable");

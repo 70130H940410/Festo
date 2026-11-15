@@ -46,10 +46,14 @@
 
   <div class="card">
     <h3>你是工廠負責人或工程師？</h3>
+    {% if config.get('DUAL_MODE') and not offline_demo %}
+    <p class="text-muted">請使用工廠管理者提供的帳號登入。連線版不開放公開註冊管理者。</p>
+    {% else %}
     <p class="text-muted">
       若需管理庫存與標準製程模板，請使用工廠管理者註冊，並輸入工廠負責人金鑰。
     </p>
     <a class="btn btn-secondary" href="{{ url_for('auth.register_manager') }}">工廠管理者註冊</a>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

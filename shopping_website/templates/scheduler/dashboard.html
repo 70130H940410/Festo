@@ -415,9 +415,9 @@ function dropItem(e) {
 
 // ── 安全 API 請求 ──
 async function fetchJson(url) {
-  const r = await fetch(url);
+  const r = await fetch(window.festoUrl(url));
   if (r.redirected || r.status === 401 || r.status === 403) {
-    window.location.href = '/login';
+    window.location.href = window.festoUrl('/login');
     throw new Error('Session 已過期或權限不足，請重新登入');
   }
   if (!r.ok) {
@@ -428,7 +428,7 @@ async function fetchJson(url) {
     return JSON.parse(text);
   } catch (err) {
     if (text.includes('<!DOCTYPE') || text.includes('<html')) {
-      window.location.href = '/login';
+      window.location.href = window.festoUrl('/login');
       throw new Error('Session 已過期，重新導向中...');
     }
     throw new Error('回應資料格式不正確');
@@ -492,7 +492,7 @@ async function saveOrder() {
   const items = document.querySelectorAll('#order-queue-container .order-queue-item');
   const seq = [...items].map(el => el.dataset.oid);
   try {
-    const res = await fetch('/scheduler/api/reorder', {
+    const res = await fetch(window.festoUrl('/scheduler/api/reorder'), {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({order_sequence: seq})
     });
@@ -520,7 +520,7 @@ async function compareAlgorithms() {
   document.getElementById('export-comparison').disabled = true;
   document.getElementById('export-details').disabled = true;
   try {
-    const response = await fetch('/scheduler/api/compare_algorithms');
+    const response = await fetch(window.festoUrl('/scheduler/api/compare_algorithms'));
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || '比較失敗');
     if (!data.order_count) { status.textContent = '目前沒有待排訂單，尚無可比較或匯出的結果。'; return; }

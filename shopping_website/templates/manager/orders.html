@@ -181,7 +181,7 @@
 <script>
 function openRejectModal(orderId) {
     document.getElementById('rejectOrderIdTxt').textContent = orderId;
-    document.getElementById('rejectForm').action = `/manager/orders/${orderId}/delete`;
+    document.getElementById('rejectForm').action = window.festoUrl(`/manager/orders/${orderId}/delete`);
     document.getElementById('rejectModal').classList.add('active');
 }
 

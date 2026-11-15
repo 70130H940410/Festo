@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: festo-factory
+    runtime: python
+    branch: 112303537branchA
+    rootDir: shopping_website
+    plan: starter
+    numInstances: 1
+    buildCommand: pip install -r requirements-deploy.txt
+    startCommand: python deploy.py
+    healthCheckPath: /healthz
+    autoDeployTrigger: off
+    disk:
+      name: festo-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: FESTO_STORAGE_DIR
+        value: /var/data/festo
+      - key: FESTO_SECRET_KEY
+        generateValue: true
+      - key: FESTO_ONLINE_ENABLED
+        value: "0"
+      - key: FESTO_COOKIE_SECURE
+        value: "1"

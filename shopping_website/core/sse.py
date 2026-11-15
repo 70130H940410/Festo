@@ -9,6 +9,8 @@
 # =============================================================
 
 import queue
+from flask import current_app
+from werkzeug.local import LocalProxy
 
 
 class SSEManager:
@@ -43,5 +45,11 @@ class SSEManager:
                 del self.listeners[i]
 
 
-# 全域單例：整個 App 共用同一個 SSEManager
-sse_manager = SSEManager()
+def get_sse_manager():
+    if 'festo_sse' not in current_app.extensions:
+        current_app.extensions['festo_sse'] = SSEManager()
+    return current_app.extensions['festo_sse']
+
+
+# Preserve callers while keeping notifications inside their own Flask application.
+sse_manager = LocalProxy(get_sse_manager)

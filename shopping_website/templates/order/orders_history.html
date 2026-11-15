@@ -171,7 +171,7 @@ function filterOrders(status, btnElement) {
 }
 
 function payOrder(orderId) {
-    fetch(`/api/pay_order/${orderId}`, {
+    fetch(window.festoUrl(`/api/pay_order/${orderId}`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
     })
@@ -179,7 +179,7 @@ function payOrder(orderId) {
     .then(data => {
         if (data.success) {
             alert(data.message || "付款成功！");
-            window.location.href = "/orders?tab=active";
+            window.location.href = window.festoUrl("/orders?tab=active");
         } else {
             alert("付款失敗：" + data.message);
         }
@@ -189,7 +189,7 @@ function payOrder(orderId) {
 
 function openCancelModal(orderId) {
     document.getElementById('cancelOrderIdTxt').textContent = orderId;
-    document.getElementById('cancelForm').action = `/orders/${orderId}/cancel`;
+    document.getElementById('cancelForm').action = window.festoUrl(`/orders/${orderId}/cancel`);
     document.getElementById('cancelModal').classList.add('active');
 }
 

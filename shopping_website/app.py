@@ -83,7 +83,8 @@ def create_app(config=None) -> Flask:
     # -------------------------
     # SSE 推播串流路由
     # -------------------------
-    from core.sse import sse_manager
+    from core.sse import SSEManager, sse_manager
+    app.extensions['festo_sse'] = SSEManager()
     from flask import Response
 
     @app.route("/api/stream")
@@ -93,14 +94,21 @@ def create_app(config=None) -> Flask:
         前端透過 EventSource('/api/stream') 連線，
         工廠狀態更新時，sse_manager.announce() 會把訊息推送給所有連線的前端。
         """
+        import queue
+        manager = sse_manager._get_current_object()
+        q = manager.listen()
         def event_stream():
-            q = sse_manager.listen()  # 建立本次連線的 Queue
             try:
                 while True:
-                    msg = q.get()  # 阻塞等待新訊息
+                    try:
+                        msg = q.get(timeout=15)
+                    except queue.Empty:
+                        yield ': keepalive\n\n'
+                        continue
                     yield f"data: {msg}\n\n"
-            except GeneratorExit:
-                pass  # 前端斷線時 Python 會丟出 GeneratorExit，直接忽略
+            finally:
+                if q in manager.listeners:
+                    manager.listeners.remove(q)
         return Response(event_stream(), mimetype="text/event-stream")
 
     from flask import send_file

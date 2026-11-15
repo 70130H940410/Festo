@@ -153,7 +153,7 @@
   const orderStatusBadge = document.getElementById("order-status-badge");
 
   async function updateDOM() {
-      const res = await fetch(`/factory/api/order_status/${ORDER_ID}`);
+      const res = await fetch(window.festoUrl(`/factory/api/order_status/${ORDER_ID}`));
       if (!res.ok) return;
       const data = await res.json();
 
@@ -198,7 +198,7 @@
 
     statusEl.textContent = "即時監控中 (SSE 連線已建立) ...";
 
-    const evtSource = new EventSource("/api/stream");
+    const evtSource = new EventSource(window.festoUrl("/api/stream"));
     evtSource.onmessage = function(e) {
         try {
             const msg = JSON.parse(e.data);

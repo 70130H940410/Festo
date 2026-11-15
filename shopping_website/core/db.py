@@ -18,7 +18,7 @@ from flask import current_app, has_app_context
 try:
     from dotenv import load_dotenv
     _env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
-    if os.environ.get('FESTO_OFFLINE') != '1' and os.path.exists(_env_path):
+    if os.environ.get('FESTO_SKIP_DOTENV') != '1' and os.environ.get('FESTO_OFFLINE') != '1' and os.path.exists(_env_path):
         load_dotenv(_env_path)
 except ImportError:
     pass
@@ -49,8 +49,8 @@ def database_path(filename):
 
 def offline_mode():
     """Demo data must never be sent to the factory, even with inherited credentials."""
-    return (os.environ.get('FESTO_OFFLINE') == '1'
-            or (has_app_context() and current_app.config.get('OFFLINE_MODE', False))
+    configured = current_app.config.get('OFFLINE_MODE', False) if has_app_context() else os.environ.get('FESTO_OFFLINE') == '1'
+    return (configured
             or os.path.isfile(database_path('.festo-demo')))
 # =========================================================
 # [修改點] Access 資料庫路徑設定
@@ -117,6 +117,8 @@ _festo_db_lock = threading.Lock()  # 預留 Lock，避免多執行緒同時寫�
 def get_festo_db():
     if offline_mode():
         raise RuntimeError('離線協作模式未連接 MES Access。')
+    if has_app_context() and current_app.config.get('CLOUD_ONLY'):
+        raise RuntimeError('雲端網站只使用原同步程式傳回的資料，不能直接開啟工廠 Access。')
     import pyodbc
     conn_str = r"Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=" + FESTO_DB_PATH + ";"
     conn = pyodbc.connect(conn_str, autocommit=True)

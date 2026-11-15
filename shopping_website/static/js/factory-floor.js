@@ -182,7 +182,7 @@ async function sync(){
   const timeout=setTimeout(()=>requestController.abort(),20000);
   try{
     const url=mode==='cloud'?`/factory/api/floor_cloud_status?order_id=${encodeURIComponent(orderPicker.value)}`:`/factory/api/floor_status/${encodeURIComponent(orderPicker.value)}`;
-    const response=await fetch(url,{signal:requestController.signal,cache:'no-store'});
+    const response=await fetch(window.festoUrl(url),{signal:requestController.signal,cache:'no-store'});
     if(!response.ok)throw new Error('讀取失敗');
     const data=await response.json();
     if(current===generation){if(mode==='cloud')acceptCloud(data);else if(mode==='live')acceptSnapshot(data);}
@@ -194,7 +194,7 @@ orderPicker.addEventListener('change',changeSource);
 modePicker.addEventListener('change',()=>{mode=modePicker.value;changeSource();});
 async function loadOrders(){
   try{
-    const response=await fetch('/factory/api/floor_orders',{cache:'no-store'});if(!response.ok)throw new Error();const data=await response.json();
+    const response=await fetch(window.festoUrl('/factory/api/floor_orders'),{cache:'no-store'});if(!response.ok)throw new Error();const data=await response.json();
     orderPicker.replaceChildren(new Option('全廠機台（不篩選訂單）',''));for(const order of data.orders){const option=document.createElement('option');option.value=order.order_id;option.textContent=`${order.order_id} · 本機 ${order.status}`;orderPicker.append(option);}
     if(data.orders.some(o=>o.order_id===orderPicker.dataset.order))orderPicker.value=orderPicker.dataset.order;
     changeSource();

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>選擇模式｜FESTO 智慧工廠</title>
+  <link rel="stylesheet" href="/offline/static/css/base.css">
+  <link rel="stylesheet" href="/offline/static/css/festo-theme.css">
+</head>
+<body class="festo-theme">
+  <header><div class="brand-bar"><a class="brand-name" href="/">FESTO</a><span class="brand-caption">智慧工廠</span></div></header>
+  <main id="main-content">
+    <h1>選擇工作模式</h1>
+    <p>同一套網站，分開保存測試與工廠資料。進入各模式後需分別登入。</p>
+    <section class="card" aria-labelledby="offline-title">
+      <h2 id="offline-title">離線協作版</h2>
+      <p>試下訂單、比較排程與觀看 2D 模擬。使用獨立測試資料，不會送單到工廠。</p>
+      <p><a class="btn btn-primary" href="/offline/">進入離線版</a></p>
+      <p>測試帳號：<code>demo_admin</code> 或 <code>demo_customer</code>，密碼：<code>LocalDemo123!</code></p>
+    </section>
+    <section class="card" aria-labelledby="online-title">
+      <h2 id="online-title">連線工廠版</h2>
+      {% if online_enabled %}
+      <p>讀取原同步程式傳回的工單與機台狀態；實際送單需管理者確認。資料是否即時，以頁面更新時間為準。</p>
+      <p><a class="btn btn-primary" href="/online/login">進入連線版</a></p>
+      {% else %}
+      <p role="status">尚未啟用。管理者完成工廠連線與獨立資料副本設定後，才會開放此入口。</p>
+      {% endif %}
+    </section>
+    <p>「離線」指不連接工廠資料；瀏覽此線上網站仍需要網路。</p>
+  </main>
+</body>
+</html>

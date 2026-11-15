@@ -45,7 +45,7 @@
     </ul>
 
     <div class="home-actions">
-      <a class="btn btn-primary" href="{{ url_for('auth.register_manager') }}">工廠管理者註冊</a>
+      {% if not config.get('DUAL_MODE') or offline_demo %}<a class="btn btn-primary" href="{{ url_for('auth.register_manager') }}">工廠管理者註冊</a>{% endif %}
       <a class="btn btn-secondary" href="{{ url_for('auth.login') }}">已有帳號？前往登入</a>
     </div>
   </section>

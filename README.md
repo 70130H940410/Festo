@@ -2,6 +2,12 @@
 
 Flask 網站，包含商品下單、庫存、製程管理、排程比較／CSV 匯出，以及 2D 工廠。實廠模式沿用原同步程式交換 MES 與 Supabase 資料；離線協作模式使用獨立的假資料，不會向工廠送單。
 
+## 直接部署成一個網站
+
+[部署到 Render](https://render.com/deploy?repo=https%3A%2F%2Fgithub.com%2F70130H940410%2FFesto%2Ftree%2F112303537branchA) · [部署與資料搬移說明](docs/deployment.md)
+
+同一網址提供 `/offline/` 離線協作版與 `/online/` 連線工廠版，各自保存資料與登入狀態。首次部署先提供測試資料；連線版需由管理者私下設定既有資料副本和 Supabase 憑證後啟用。`render.yaml` 使用付費 Starter 服務及 1 GB 持久化磁碟，請先核對主機顯示的費用。原本的本機資料庫不會被初始化工具修改或上傳至 GitHub。
+
 ## 新成員：下載後在本機執行
 
 目前網站更新在 **`112303537branchA`** 分支。建議使用 **Python 3.11 或更新版本**。一般離線開發不需要 USB、Access、ODBC 驅動、Supabase 金鑰或 Node.js。

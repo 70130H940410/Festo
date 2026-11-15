@@ -69,7 +69,7 @@ let statusPieChart, dailyLineChart;
 
 async function fetchStatus() {
     try {
-        const res = await fetch("/admin/api/status");
+        const res = await fetch(window.festoUrl("/admin/api/status"));
         const data = await res.json();
 
         document.getElementById("last-update").textContent = "本機資料 | 查詢時間: " + data.now;
@@ -131,7 +131,7 @@ async function fetchStatus() {
                 let stBadge = o.status === 'pending_payment' ? '<span class="badge badge-warning" style="background-color: #ffc107; color: #000;">等待付款</span>' : '<span class="badge badge-primary">產線處理中</span>';
                 return `
                 <tr>
-                    <td class="mono"><a href="/factory/simulate?order_id=${o.order_id}" target="_blank">${o.order_id}</a></td>
+                    <td class="mono"><a href="${window.festoUrl('/factory/simulate')}?order_id=${encodeURIComponent(o.order_id)}" target="_blank">${o.order_id}</a></td>
                     <td>${o.customer_name}</td>
                     <td class="cell-wrap">${o.product}</td>
                     <td>${o.amount}</td>
@@ -146,28 +146,28 @@ async function fetchStatus() {
 }
 
 async function repairMachine(station) {
-    await fetch("/admin/api/repair", {
+    await fetch(window.festoUrl("/admin/api/repair"), {
         method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({station})
     });
     fetchStatus();
 }
 
 async function breakMachine(station) {
-    await fetch("/admin/api/break", {
+    await fetch(window.festoUrl("/admin/api/break"), {
         method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({station})
     });
     fetchStatus();
 }
 
 async function restock() {
-    await fetch("/admin/api/restock", {method: "POST"});
+    await fetch(window.festoUrl("/admin/api/restock"), {method: "POST"});
     alert("所有原物料已補齊至 2000 件！");
     fetchStatus();
 }
 
 async function fetchAnalytics() {
     try {
-        const res = await fetch("/admin/api/analytics");
+        const res = await fetch(window.festoUrl("/admin/api/analytics"));
         const data = await res.json();
 
         // Render Pie Chart
@@ -209,7 +209,7 @@ async function fetchAnalytics() {
 }
 
 function initSSE() {
-    const evtSource = new EventSource("/api/stream");
+    const evtSource = new EventSource(window.festoUrl("/api/stream"));
     evtSource.onmessage = function(e) {
         fetchStatus();
         fetchAnalytics();

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <title>{% block title %}智慧工廠下單系統{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>window.festoUrl = path => {{ request.script_root|tojson }} + path;</script>
 
   <!-- 主樣式 -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
@@ -40,6 +41,7 @@
       <span class="brand-caption">智慧工廠｜遠端下單與製程監控</span>
     </div>
     <nav class="main-nav" aria-label="主要導覽">
+      {% if config.get('DUAL_MODE') %}<a class="nav-link" href="/">切換模式</a>{% endif %}
 
       <!-- 首頁（直接連結） -->
       <a class="nav-link" href="{{ url_for('index') }}" {% if request.endpoint == 'index' %}aria-current="page"{% endif %}>首頁</a>
@@ -107,7 +109,9 @@
 
   <main id="main-content" tabindex="-1">
     {% if offline_demo %}
-    <p class="alert alert-info" role="status">離線協作模式：目前為測試資料；訂單與動畫只在本機模擬，不會送往工廠或雲端。</p>
+      <p class="alert alert-info" role="status">離線協作模式：目前為測試資料；訂單與動畫只在此模式模擬，不會送往工廠或雲端。</p>
+      {% elif config.get('DUAL_MODE') %}
+      <p class="alert alert-info" role="status">連線工廠模式：使用工廠資料；送單需管理者確認。連線與即時狀態請以 MES 頁面的更新時間及回覆為準。</p>
     {% endif %}
     {% block content %}{% endblock %}
   </main>

@@ -171,22 +171,28 @@ _BUFFER_CACHE_TTL = 5.0    # Buffer 位置快取 5 秒（與前端輪詢频率�
 _MEMORY_CACHE: Dict[str, Tuple[Any, float]] = {}
 
 
+def _cache_store():
+    from flask import current_app, has_app_context
+    return current_app.extensions.setdefault('festo_mes_cache', {}) if has_app_context() else _MEMORY_CACHE
+
+
 def _get_cached(key: str) -> Optional[Any]:
-    if key in _MEMORY_CACHE:
-        val, ts = _MEMORY_CACHE[key]
+    cache = _cache_store()
+    if key in cache:
+        val, ts = cache[key]
         if time.time() - ts < _CACHE_TTL:
             return val
     return None
 
 
 def _set_cached(key: str, val: Any) -> Any:
-    _MEMORY_CACHE[key] = (val, time.time())
+    _cache_store()[key] = (val, time.time())
     return val
 
 
 def clear_mes_cache():
     """手動清除 MES 快取"""
-    _MEMORY_CACHE.clear()
+    _cache_store().clear()
 
 
 class MesDataService:
@@ -694,8 +700,9 @@ class MesDataService:
         回傳：32 個 dict 的 list（index 0 = BufPos 1，index 31 = BufPos 32）
         """
         # Buffer 位置用較短的快取（5秒）
-        if "buffer_positions" in _MEMORY_CACHE:
-            val, ts = _MEMORY_CACHE["buffer_positions"]
+        cache = _cache_store()
+        if "buffer_positions" in cache:
+            val, ts = cache["buffer_positions"]
             if time.time() - ts < _BUFFER_CACHE_TTL:
                 return val
 
