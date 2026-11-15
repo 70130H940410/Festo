@@ -1,0 +1,3 @@
+# Offline website development: no Access driver or Supabase credentials required.
+Flask==3.1.2
+python-dotenv>=1.0,<2

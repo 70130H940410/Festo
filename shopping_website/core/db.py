@@ -12,12 +12,13 @@
 import os
 import sqlite3
 import threading
+from flask import current_app, has_app_context
 
 # ── 載入 .env 環境變數 ─────────────────────────────────────────
 try:
     from dotenv import load_dotenv
     _env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
-    if os.path.exists(_env_path):
+    if os.environ.get('FESTO_OFFLINE') != '1' and os.path.exists(_env_path):
         load_dotenv(_env_path)
 except ImportError:
     pass
@@ -34,9 +35,23 @@ except ImportError:
 # -------------------------
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-USER_DB_PATH       = os.path.join(BASE_DIR, "database", "User_Data.db")
-PRODUCT_DB_PATH    = os.path.join(BASE_DIR, "database", "product.db")
-ORDER_MGMT_DB_PATH = os.path.join(BASE_DIR, "database", "order_management.db")
+DATA_DIR = os.path.abspath(os.path.join(BASE_DIR, os.environ.get('FESTO_DATA_DIR', 'database')))
+USER_DB_PATH       = os.path.join(DATA_DIR, "User_Data.db")
+PRODUCT_DB_PATH    = os.path.join(DATA_DIR, "product.db")
+ORDER_MGMT_DB_PATH = os.path.join(DATA_DIR, "order_management.db")
+
+
+def database_path(filename):
+    """All website routes use the same configured SQLite directory."""
+    directory = current_app.config.get('DATABASE_DIR', DATA_DIR) if has_app_context() else DATA_DIR
+    return os.path.join(directory, filename)
+
+
+def offline_mode():
+    """Demo data must never be sent to the factory, even with inherited credentials."""
+    return (os.environ.get('FESTO_OFFLINE') == '1'
+            or (has_app_context() and current_app.config.get('OFFLINE_MODE', False))
+            or os.path.isfile(database_path('.festo-demo')))
 # =========================================================
 # [修改點] Access 資料庫路徑設定
 # ---------------------------------------------------------
@@ -66,7 +81,7 @@ def get_user_db() -> sqlite3.Connection:
     連線到 User_Data.db（使用者資料庫）。
     包含：User_profile（帳號/密碼/角色）、registration_key（管理者金鑰）
     """
-    conn = sqlite3.connect(USER_DB_PATH)
+    conn = sqlite3.connect(database_path('User_Data.db'))
     conn.row_factory = sqlite3.Row  # 讓查詢結果可用欄位名稱存取
     return conn
 
@@ -77,7 +92,7 @@ def get_product_db() -> sqlite3.Connection:
     包含：products（商品清單）、standard_process（製程步驟）、
           raw_materials（原物料）、bom（物料清單）
     """
-    conn = sqlite3.connect(PRODUCT_DB_PATH)
+    conn = sqlite3.connect(database_path('product.db'))
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -88,7 +103,7 @@ def get_order_mgmt_db() -> sqlite3.Connection:
     包含：order_list（訂單主表）、station_state（站點狀態）、
           piece_step_progress（每件商品的製程進度）
     """
-    conn = sqlite3.connect(ORDER_MGMT_DB_PATH)
+    conn = sqlite3.connect(database_path('order_management.db'))
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -100,6 +115,8 @@ def get_order_mgmt_db() -> sqlite3.Connection:
 _festo_db_lock = threading.Lock()  # 預留 Lock，避免多執行緒同時寫入
 
 def get_festo_db():
+    if offline_mode():
+        raise RuntimeError('離線協作模式未連接 MES Access。')
     import pyodbc
     conn_str = r"Driver={Microsoft Access Driver (*.mdb, *.accdb)};DBQ=" + FESTO_DB_PATH + ";"
     conn = pyodbc.connect(conn_str, autocommit=True)
@@ -123,6 +140,8 @@ def get_supabase_client():
     如果未設 SUPABASE_URL / SUPABASE_KEY 環境變數，回傳 None。
     """
     global _supabase_client
+    if offline_mode():
+        return None
     if _supabase_client is not None:
         return _supabase_client
     if not _SUPABASE_AVAILABLE:

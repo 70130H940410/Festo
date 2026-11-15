@@ -106,6 +106,9 @@
   </header>
 
   <main id="main-content" tabindex="-1">
+    {% if offline_demo %}
+    <p class="alert alert-info" role="status">離線協作模式：目前為測試資料；訂單與動畫只在本機模擬，不會送往工廠或雲端。</p>
+    {% endif %}
     {% block content %}{% endblock %}
   </main>
 

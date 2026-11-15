@@ -4,7 +4,7 @@
     <span class="floor-mode" id="floor-source">正在連線</span>
   </div>
   <div class="floor-controls">
-    <label for="floor-mode">模式</label><select id="floor-mode">{% if session.get("role") == "admin" %}<option value="cloud">實際工廠同步</option>{% endif %}<option value="live">本機訂單進度</option><option value="demo">流程示範</option></select>
+    <label for="floor-mode">模式</label><select id="floor-mode">{% if session.get("role") == "admin" and not offline_demo %}<option value="cloud">實際工廠同步</option>{% endif %}<option value="live">本機訂單進度</option><option value="demo">流程示範</option></select>
     <label for="floor-order">訂單</label><select id="floor-order" data-order="{{ order_info.order_id if order_info is defined else '' }}"><option value="">讀取訂單中…</option></select>
     <button type="button" class="btn btn-primary" id="floor-play">開始播放</button>
     <button type="button" class="btn btn-secondary" id="floor-reset">重新開始</button>

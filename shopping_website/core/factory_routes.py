@@ -52,7 +52,8 @@ _COMPLETE_STATUS    = "completed"             # 訂單完成狀態字串
 
 def _db_path(filename: str) -> str:
     """回傳 database/ 目錄下指定檔名的絕對路徑（依賴 Flask app context）"""
-    return os.path.join(current_app.root_path, "database", filename)
+    from .db import database_path
+    return database_path(filename)
 
 
 def _conn(path: str) -> sqlite3.Connection:

@@ -16,6 +16,7 @@ from flask import Blueprint, render_template, jsonify, request
 import sqlite3
 import os
 from datetime import datetime
+from .db import database_path
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -26,8 +27,7 @@ admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
 def _db_path(filename: str) -> str:
     """回傳 database/ 目錄下指定檔名的絕對路徑"""
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    return os.path.join(base_dir, "database", filename)
+    return database_path(filename)
 
 
 def _conn(path: str) -> sqlite3.Connection:

@@ -24,16 +24,17 @@ import logging
 import threading
 import time
 from flask import Flask, render_template, session
+from core.db import DATA_DIR, offline_mode
 
 # -------------------------
 # 專案路徑 & 資料庫路徑
 # -------------------------
 BASE_DIR         = os.path.abspath(os.path.dirname(__file__))
-DATABASE_PRODUCT = os.path.join(BASE_DIR, "database", "product.db")
-DATABASE_USER    = os.path.join(BASE_DIR, "database", "User_Data.db")
+DATABASE_PRODUCT = os.path.join(DATA_DIR, "product.db")
+DATABASE_USER    = os.path.join(DATA_DIR, "User_Data.db")
 
 
-def create_app() -> Flask:
+def create_app(config=None) -> Flask:
     """
     Application Factory：建立並回傳 Flask App 實例。
     在測試或多環境部署時，可以多次呼叫此函式建立獨立的 App。
@@ -44,10 +45,14 @@ def create_app() -> Flask:
     # App 設定
     # -------------------------
     # 開發用的 secret_key，正式部署請改成環境變數
-    app.config["SECRET_KEY"] = "dev-secret-festo-112303537"
+    app.config["SECRET_KEY"] = os.environ.get('FESTO_SECRET_KEY') or 'dev-secret-festo-112303537'
+    app.config['DATABASE_DIR'] = DATA_DIR
+    app.config['OFFLINE_MODE'] = os.environ.get('FESTO_OFFLINE') == '1'
+    if config:
+        app.config.update(config)
     # 把資料庫路徑存進 config，讓 Blueprint 可以透過 current_app.config 存取
-    app.config["DATABASE_PRODUCT"] = DATABASE_PRODUCT
-    app.config["DATABASE_USER"]    = DATABASE_USER
+    app.config["DATABASE_PRODUCT"] = os.path.join(app.config['DATABASE_DIR'], 'product.db')
+    app.config["DATABASE_USER"]    = os.path.join(app.config['DATABASE_DIR'], 'User_Data.db')
 
     # -------------------------
     # 載入並註冊 Blueprints
@@ -119,6 +124,7 @@ def create_app() -> Flask:
             "logged_in":       bool(session.get("user_id")),
             "current_account": session.get("account"),
             "current_role":    session.get("role"),
+            "offline_demo":    offline_mode(),
         }
 
     return app
